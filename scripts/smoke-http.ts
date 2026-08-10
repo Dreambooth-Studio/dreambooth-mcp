@@ -42,7 +42,33 @@ async function waitForHealth(timeoutMs = 15000): Promise<void> {
   throw new Error("server did not become healthy");
 }
 
+/**
+ * HTTP mode must refuse to start with a developer token configured: seeding
+ * every session with one account's token would serve that account's data to
+ * whoever connects. Verified by starting the server the wrong way on purpose.
+ */
+async function assertRefusesSeedToken(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const bad = spawn(process.execPath, ["dist/index.js", "--http"], {
+      env: { ...process.env, PORT: String(PORT + 1), DREAMBOOTH_TOKEN: "a-token" },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let stderr = "";
+    bad.stderr.on("data", (d) => (stderr += d));
+    bad.on("exit", (code) => {
+      resolve(code !== 0 && /must not be set in HTTP mode/.test(stderr));
+    });
+  });
+}
+
 async function main(): Promise<void> {
+  if (await assertRefusesSeedToken()) {
+    console.log(`${OK}✓${RESET} refuses to start with DREAMBOOTH_TOKEN set`);
+  } else {
+    console.log(`${BAD}✗${RESET} started with a seed token — every session would share it`);
+    process.exitCode = 1;
+  }
+
   const child = spawn(process.execPath, ["dist/index.js", "--http"], {
     env: { ...process.env, PORT: String(PORT), DREAMBOOTH_TOKEN: "" },
     stdio: ["ignore", "inherit", "inherit"],
