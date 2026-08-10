@@ -9,9 +9,9 @@
  *
  *   npm run inspect
  *
- * With no DREAMBOOTH_TOKEN set it still exercises search_docs (which needs no
- * auth) and shows the authed tools failing with a readable message rather than
- * a crash — which is itself worth verifying.
+ * It runs unauthenticated: search_docs needs no account, and the authed tools
+ * must fail with a readable message naming connect_account rather than
+ * crashing — which is itself worth verifying.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -34,7 +34,6 @@ async function main(): Promise<void> {
     // --stdio is required: the entry point defaults to HTTP, and without this
     // the child starts a web server and never answers on stdin.
     args: [require.resolve("tsx/cli"), "src/index.ts", "--stdio"],
-    // Inherit the environment so DREAMBOOTH_TOKEN flows through when present.
     env: { ...process.env } as Record<string, string>,
     stderr: "inherit",
   });

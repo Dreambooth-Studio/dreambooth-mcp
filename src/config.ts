@@ -8,16 +8,6 @@ export type Mode = "stdio" | "http";
 export interface Config {
   /** Origin of the Studio API. */
   apiUrl: string;
-  /**
-   * Optional developer token for stdio mode only.
-   *
-   * In HTTP mode there is no such thing: each session starts unauthenticated
-   * and the operator connects through the device flow, so no token is ever
-   * pasted into a config file or held for anyone but the person who approved
-   * it. When set, this is a NextAuth session JWT — session-equivalent, one
-   * year, no scopes, no revocation — so it must never be committed or logged.
-   */
-  token?: string;
   /** Per-request ceiling for calls to the Studio. */
   requestTimeoutMs: number;
   /** HTTP mode only. */
@@ -30,13 +20,30 @@ export interface Config {
   allowedHosts: string[];
 }
 
+/**
+ * There is deliberately NO token here, in either transport.
+ *
+ * Every session — stdio included — authenticates through connect_account and
+ * the Studio's device flow, so the operator approves in their own browser and
+ * the token exists only in memory for the life of that session. A configured
+ * token would be a session-equivalent credential (one year, no scopes, no
+ * revocation) sitting on disk, and over HTTP it would authenticate every
+ * incoming session as one account. Neither is worth the saved 15 seconds.
+ */
 export function loadConfig(): Config {
+  if (process.env.DREAMBOOTH_TOKEN?.trim()) {
+    // Read only to say it is ignored: someone following an old README would
+    // otherwise set it and wonder why they are still asked to connect.
+    console.error(
+      "[dreambooth-mcp] DREAMBOOTH_TOKEN is set but ignored — connect with the connect_account tool instead."
+    );
+  }
+
   return {
     apiUrl: (process.env.DREAMBOOTH_API_URL || "https://dreamboothstudio.com").replace(
       /\/$/,
       ""
     ),
-    token: process.env.DREAMBOOTH_TOKEN?.trim() || undefined,
     requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS || 15000),
     // Railway injects PORT. API_PORT then a default, matching the whatsapp
     // service's port guard; anything non-integer is a config error, not a

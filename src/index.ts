@@ -12,9 +12,8 @@ import { startHttpServer } from "./http.js";
  *   --stdio            local, for Claude Desktop and the smoke script.
  *
  * Everything under src/mcp/ and src/tools/ is identical either way; only the
- * transport and where the token comes from differ. In stdio mode a developer
- * token may be pasted in via DREAMBOOTH_TOKEN; over HTTP each session starts
- * unauthenticated and the operator connects through the device flow.
+ * transport differs. Both start unauthenticated and connect through the same
+ * device flow — there is no token to configure in either mode.
  */
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -28,13 +27,12 @@ async function main(): Promise<void> {
   // stdio: NOTHING may be written to stdout except MCP protocol frames. stdout
   // IS the transport; a stray console.log corrupts the stream and the client
   // drops the connection with a parse error. Diagnostics go to stderr.
-  const tokens = new SessionTokens(config.token);
+  const tokens = new SessionTokens();
   const server = createServer(config, tokens);
   await server.connect(new StdioServerTransport());
 
   console.error(
-    `[${SERVER_NAME} ${SERVER_VERSION}] ready on stdio → ${config.apiUrl}` +
-      (config.token ? " (token from env)" : " (no token — run connect_account)")
+    `[${SERVER_NAME} ${SERVER_VERSION}] ready on stdio → ${config.apiUrl} (run connect_account to sign in)`
   );
 
   const shutdown = (signal: string) => {

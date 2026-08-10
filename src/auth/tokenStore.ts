@@ -18,9 +18,9 @@ export class SessionTokens {
   private pendingSince: number | null = null;
   private lastError: string | null = null;
 
-  constructor(initialToken?: string) {
-    this.token = initialToken?.trim() || null;
-  }
+  // No seed-token constructor on purpose. A session becomes authenticated only
+  // by its own operator completing the device flow, so there is no way to
+  // pre-load one account's credential into somebody else's session.
 
   get(): string | null {
     return this.token;

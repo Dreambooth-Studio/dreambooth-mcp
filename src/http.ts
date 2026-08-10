@@ -25,18 +25,6 @@ interface SessionEntry {
 }
 
 export function startHttpServer(config: Config): void {
-  // A developer token is a stdio-only convenience. Over HTTP many operators
-  // share one process, so seeding every new session with one account's token
-  // would hand that account's data to whoever connects — without them
-  // approving anything. Refuse to start rather than serve that quietly.
-  if (config.token) {
-    throw new Error(
-      "DREAMBOOTH_TOKEN must not be set in HTTP mode: it would authenticate " +
-        "every incoming session as that one account. Unset it and let operators " +
-        "connect via connect_account, or run with --stdio for local development."
-    );
-  }
-
   const app = express();
   const sessions = new Map<string, SessionEntry>();
 
@@ -77,10 +65,9 @@ export function startHttpServer(config: Config): void {
     // No session id — this must be an initialize request; anything else is a
     // client error, and the transport rejects it for us.
     //
-    // Deliberately constructed with NO seed token: over HTTP a session is
-    // unauthenticated until its own operator completes connect_account. The
-    // guard at startup already rejects a configured token, and passing one
-    // here would be the way that guard silently stops mattering.
+    // A session starts unauthenticated and stays that way until its own
+    // operator completes connect_account. There is no configuration that can
+    // change that.
     const tokens = new SessionTokens();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),

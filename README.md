@@ -46,12 +46,18 @@ than crashing — that failure path is part of what the checks verify.
 
 ## Connecting an account
 
-Over HTTP there is no token to paste. The operator asks their assistant to
-connect; `connect_account` starts the device flow the Studio already runs for
-the Electron booth and returns a Google link for them to open. The tool returns
-immediately and polls in the background — a tool call that blocks for minutes
-reads as a hung server to every MCP client, and by the time they ask their next
-question the token is in place.
+**There is no token to configure, in either transport.** The operator asks their
+assistant to connect; `connect_account` starts the device flow the Studio
+already runs for the Electron booth and returns a Google link for them to open.
+The tool returns immediately and polls in the background — a tool call that
+blocks for minutes reads as a hung server to every MCP client, and by the time
+they ask their next question the token is in place.
+
+That includes local development. A pasted token would be a session-equivalent
+credential (one year, no scopes, no revocation) sitting in a file on disk, and
+in HTTP mode it would authenticate every incoming session as that one account.
+Approving in a browser after a restart takes about fifteen seconds; that is the
+whole cost of not having it.
 
 Tokens are held **in memory, per MCP session**. A restart means everyone
 reconnects, which is the right trade for v1: there is no credential store to
@@ -65,20 +71,22 @@ Railway, following the `dreambooth-whatsapp` recipe: `railway.json` with
 `npm run build` / `npm start`, healthcheck on `/health`, restart ON_FAILURE. No
 Dockerfile, no CI, and no volume — this service is stateless.
 
-Set `DREAMBOOTH_API_URL` and `ALLOWED_HOSTS`; leave `DREAMBOOTH_TOKEN` unset.
+Set `DREAMBOOTH_API_URL` and `ALLOWED_HOSTS`. There is no token to configure.
 
 ### Claude Desktop
 
-Add to `claude_desktop_config.json`:
+Add to `claude_desktop_config.json`. `--stdio` is required — the entry point
+defaults to HTTP, and without it Claude Desktop starts a web server and waits
+forever for a reply on stdin.
 
 ```json
 {
   "mcpServers": {
     "dreambooth": {
       "command": "npx",
-      "args": ["tsx", "src/index.ts"],
+      "args": ["tsx", "src/index.ts", "--stdio"],
       "cwd": "/absolute/path/to/dreambooth-mcp",
-      "env": { "DREAMBOOTH_TOKEN": "…" }
+      "env": { "DREAMBOOTH_API_URL": "https://dreamboothstudio.com" }
     }
   }
 }
@@ -137,5 +145,5 @@ the Studio. A tool that needs such an argument is designed wrong.
 
 - **stdout is the transport.** A single `console.log` corrupts the stream and the
   client drops the connection with a parse error. Diagnostics go to stderr.
-- Do not copy `dreambooth-whatsapp`'s habit of committing `.env`. The token here
-  belongs to an operator's account.
+- Do not copy `dreambooth-whatsapp`'s habit of committing `.env`. Nothing secret
+  belongs in it here, and the surest way to keep that true is to never start.
