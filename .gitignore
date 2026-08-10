@@ -1,0 +1,12 @@
+node_modules/
+dist/
+
+# NEVER commit this. dreambooth-whatsapp deliberately commits its .env with live
+# credentials; do not copy that habit here — the token in this file belongs to an
+# operator's Dreambooth account and is session-equivalent.
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
