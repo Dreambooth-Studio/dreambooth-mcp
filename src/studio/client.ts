@@ -25,8 +25,15 @@ export class StudioClient {
   private requireToken(): string {
     const token = this.getToken();
     if (!token) {
+      // Says "no Dreambooth account is connected", not "your account is not
+      // connected": the person asking may not have one yet, and the device
+      // flow creates an account for them if so. A message that assumes they
+      // are already a customer sends a prospect away.
       throw new StudioError(
-        `This Dreambooth account is ${this.describeAuth()}. Ask the operator to run connect_account and open the link it returns.`,
+        `No Dreambooth account is connected to this conversation (${this.describeAuth()}). ` +
+          `Run connect_account and give them the link — approving with Google connects an existing ` +
+          `account, or creates one on the spot if they do not have one yet. To answer questions ` +
+          `about Dreambooth itself rather than about their booths, use search_docs, which needs no account.`,
         401,
         false
       );

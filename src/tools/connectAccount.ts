@@ -17,9 +17,9 @@ export function buildConnectAccount(config: Config, tokens: SessionTokens) {
   return {
     name: "connect_account",
     config: {
-      title: "Connect a Dreambooth account",
+      title: "Connect or create a Dreambooth account",
       description:
-        "Start connecting this conversation to a Dreambooth Studio account. Returns a link the operator must open in their own browser to approve. Call this when any other tool reports that the account is not connected, or when the operator asks to connect or switch accounts. After returning the link, tell the operator to open it and say when they are done — do not call this tool repeatedly while waiting.",
+        "Connect this conversation to a Dreambooth Studio account. Returns a link the person opens in their own browser to approve with Google. Works for people who do NOT have a Dreambooth account yet — approving creates one, with a 14-day Pro trial — as well as for existing operators. Call this when another tool reports that no account is connected, or when someone asks to connect, sign up, or switch accounts. After returning the link, ask them to open it and say when they are done; do not call this tool again while waiting.",
       inputSchema: {},
     },
     handler: async () => {
@@ -40,8 +40,9 @@ export function buildConnectAccount(config: Config, tokens: SessionTokens) {
         // Said explicitly because the model otherwise tends to poll by calling
         // the tool again, which starts a second flow and invalidates the first.
         message:
-          "Give the operator this link to open in their browser and approve. Do not call this tool again while waiting — once they have approved, the other tools will simply start working.",
+          "Give them this link to open in their browser and approve with Google. If they do not have a Dreambooth account yet, approving creates one with a 14-day Pro trial. Do not call this tool again while waiting — once they have approved, the other tools simply start working.",
         expiresInMinutes: 5,
+        createsAccountIfNeeded: true,
       };
     },
   };
