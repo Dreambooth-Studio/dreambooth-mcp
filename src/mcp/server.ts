@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { StudioClient } from "../studio/client.js";
+import type { SessionTokens } from "../auth/tokenStore.js";
+import { buildConnectAccount } from "../tools/connectAccount.js";
 import { StudioError } from "../studio/errors.js";
 import { buildGetSessions } from "../tools/getSessions.js";
 import { buildGetGalleryStats } from "../tools/getGalleryStats.js";
@@ -47,9 +49,18 @@ function safe<A>(handler: (args: A) => Promise<unknown>) {
 /** Every v1 tool is read-only; say so, so clients can auto-approve them. */
 const READ_ONLY = { readOnlyHint: true } as const;
 
-export function createServer(config: Config): McpServer {
+export function createServer(config: Config, tokens: SessionTokens): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
-  const studio = new StudioClient(config);
+  const studio = new StudioClient(
+    config,
+    () => tokens.get(),
+    () => tokens.describe()
+  );
+
+  // Not read-only: it changes what this session can see, so clients should
+  // surface it for approval rather than auto-running it.
+  const connect = buildConnectAccount(config, tokens);
+  server.registerTool(connect.name, connect.config, safe(connect.handler));
 
   // Registered one call site at a time on purpose: each tool's inputSchema is a
   // different shape, and looping over them collapses the schemas into a union

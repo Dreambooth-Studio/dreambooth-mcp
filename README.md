@@ -4,8 +4,10 @@ MCP server for Dreambooth Studio. Lets ChatGPT, Claude and Gemini answer an
 operator's questions about their own booths — "how did my Bandung booth do this
 week?" — by wrapping the Studio API the dashboard already uses.
 
-**Status: Phase 0.** Local stdio transport, three read-only tools, personal
-token. Not deployed, not connected to any operator account but your own.
+**Status: Phase 1, not yet deployed.** Streamable HTTP + stdio, eight read-only
+tools, and account connection through the Studio's existing OAuth device flow.
+Railway config is in place; the deploy waits on the `mcp.dreamboothstudio.com`
+subdomain.
 
 Design: [`docs/dreambooth-mcp-design.md`](../dreambooth-prod/docs/dreambooth-mcp-design.md)
 in the Studio repo.
@@ -28,14 +30,42 @@ subscription token regeneration, and anything under `/api/admin`.
 
 ```bash
 npm install
-cp .env.example .env      # then paste your session token into DREAMBOOTH_TOKEN
-npm run inspect           # end-to-end smoke test — handshake, tools/list, tool calls
-npm run dev               # stdio server, for wiring into a client
+cp .env.example .env
+
+npm run dev               # Streamable HTTP on PORT (default 8080)
+npm run dev:stdio         # stdio, for Claude Desktop
+
+npm run build
+npm run inspect           # stdio smoke: handshake, tools/list, every tool
+npm run inspect:http      # HTTP smoke: sessions, isolation, unknown-session 404
 ```
 
-`npm run inspect` works without a token: `search_docs` needs no auth, and the two
-authed tools should come back with a readable "connection is not valid" message
-rather than a crash. That failure path is part of what the check verifies.
+Both smokes run without a token. `search_docs` needs no auth, and the authed
+tools must come back with a readable message naming `connect_account` rather
+than crashing — that failure path is part of what the checks verify.
+
+## Connecting an account
+
+Over HTTP there is no token to paste. The operator asks their assistant to
+connect; `connect_account` starts the device flow the Studio already runs for
+the Electron booth and returns a Google link for them to open. The tool returns
+immediately and polls in the background — a tool call that blocks for minutes
+reads as a hung server to every MCP client, and by the time they ask their next
+question the token is in place.
+
+Tokens are held **in memory, per MCP session**. A restart means everyone
+reconnects, which is the right trade for v1: there is no credential store to
+protect, and the token is session-equivalent (one year, no scopes, no
+revocation). Hardening — scopes, a token registry, revocation, 30-day TTL — is
+Phase 3, before any public connector listing.
+
+## Deploy
+
+Railway, following the `dreambooth-whatsapp` recipe: `railway.json` with
+`npm run build` / `npm start`, healthcheck on `/health`, restart ON_FAILURE. No
+Dockerfile, no CI, and no volume — this service is stateless.
+
+Set `DREAMBOOTH_API_URL` and `ALLOWED_HOSTS`; leave `DREAMBOOTH_TOKEN` unset.
 
 ### Claude Desktop
 

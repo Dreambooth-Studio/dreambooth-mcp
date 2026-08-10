@@ -8,17 +8,21 @@
   },
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts --http",
+    "dev:stdio": "tsx src/index.ts --stdio",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "node dist/index.js --http",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "inspect": "tsx scripts/smoke.ts"
+    "inspect": "tsx scripts/smoke.ts",
+    "inspect:http": "tsx scripts/smoke-http.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^22.20.1",
     "tsx": "^4.23.12",
     "typescript": "^5.9.3"

@@ -1,5 +1,5 @@
 import type { Config } from "../config.js";
-import { studioErrorFor } from "./errors.js";
+import { studioErrorFor, StudioError } from "./errors.js";
 
 /**
  * The ONLY place this service talks to Dreambooth.
@@ -9,11 +9,33 @@ import { studioErrorFor } from "./errors.js";
  * exactly one implementation of "what is this operator's revenue" and it lives
  * in the Studio. The moment an aggregation is copied in here it becomes a
  * second source of truth that drifts without anyone noticing.
+ *
+ * The token is read per request rather than captured at construction, because
+ * in HTTP mode a session starts unauthenticated and gains its token part-way
+ * through, when the operator finishes the device flow.
  */
 export class StudioClient {
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly config: Config,
+    private readonly getToken: () => string | null,
+    /** Describes why there is no token yet, for the not-connected message. */
+    private readonly describeAuth: () => string = () => "not connected"
+  ) {}
+
+  private requireToken(): string {
+    const token = this.getToken();
+    if (!token) {
+      throw new StudioError(
+        `This Dreambooth account is ${this.describeAuth()}. Ask the operator to run connect_account and open the link it returns.`,
+        401,
+        false
+      );
+    }
+    return token;
+  }
 
   async get<T>(path: string, query: Record<string, string | undefined> = {}): Promise<T> {
+    const token = this.requireToken();
     const url = new URL(this.config.apiUrl + path);
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== "") url.searchParams.set(key, value);
@@ -27,10 +49,10 @@ export class StudioClient {
       res = await fetch(url, {
         method: "GET",
         headers: {
-          // The 59 routes that use resolveAuthSession accept this. Routes that
-          // only call getServerSession do NOT — see the design doc's route
-          // migration list. We deliberately do not forge a session cookie.
-          Authorization: `Bearer ${this.config.token}`,
+          // The routes that use resolveAuthSession accept this. Routes that
+          // only call getServerSession do NOT — see the design doc's migration
+          // list. We deliberately never forge a session cookie.
+          Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
         signal: controller.signal,
@@ -50,10 +72,11 @@ export class StudioClient {
   }
 
   /**
-   * Fetches a public static file (no Authorization header).
+   * Fetches a public static file (no Authorization header, no token required).
    *
    * Used for the docs search index, which is a build-time artefact served from
-   * /public — not an API route.
+   * /public — not an API route. This is why search_docs works before the
+   * operator has connected anything.
    */
   async getPublic<T>(path: string): Promise<T> {
     const controller = new AbortController();

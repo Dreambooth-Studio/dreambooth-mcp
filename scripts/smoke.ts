@@ -31,7 +31,9 @@ function preview(result: { content?: unknown; isError?: boolean }): string {
 async function main(): Promise<void> {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [require.resolve("tsx/cli"), "src/index.ts"],
+    // --stdio is required: the entry point defaults to HTTP, and without this
+    // the child starts a web server and never answers on stdin.
+    args: [require.resolve("tsx/cli"), "src/index.ts", "--stdio"],
     // Inherit the environment so DREAMBOOTH_TOKEN flows through when present.
     env: { ...process.env } as Record<string, string>,
     stderr: "inherit",
@@ -56,7 +58,10 @@ async function main(): Promise<void> {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [
     { name: "search_docs", args: { query: "printer", locale: "en", limit: 2 } },
     { name: "list_projects", args: {} },
-    { name: "get_project", args: { projectId: process.env.SMOKE_PROJECT_ID ?? "" } },
+    // Needs a real id, so it only runs when one is supplied.
+    ...(process.env.SMOKE_PROJECT_ID
+      ? [{ name: "get_project", args: { projectId: process.env.SMOKE_PROJECT_ID } }]
+      : []),
     { name: "get_sessions", args: { limit: 1 } },
     { name: "get_revenue_summary", args: { groupBy: "month" } },
     { name: "get_credits", args: {} },

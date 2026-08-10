@@ -1,30 +1,40 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, resolveMode } from "./config.js";
+import { SessionTokens } from "./auth/tokenStore.js";
 import { createServer, SERVER_NAME, SERVER_VERSION } from "./mcp/server.js";
+import { startHttpServer } from "./http.js";
 
 /**
- * Phase 0 entry point: stdio transport, for running inside Claude Desktop or
- * the MCP Inspector on a developer machine.
+ * Two transports, one server.
  *
- * Phase 1 swaps this for Streamable HTTP on Railway. Everything under
- * src/mcp/server.ts and src/tools/ stays exactly as it is — only the transport
- * and the token source change.
+ *   --http  (default)  Streamable HTTP, for Railway and remote connectors.
+ *   --stdio            local, for Claude Desktop and the smoke script.
  *
- * NOTHING may be written to stdout except MCP protocol frames. stdout IS the
- * transport; a stray console.log corrupts the stream and the client drops the
- * connection with a parse error. All diagnostics go to stderr.
+ * Everything under src/mcp/ and src/tools/ is identical either way; only the
+ * transport and where the token comes from differ. In stdio mode a developer
+ * token may be pasted in via DREAMBOOTH_TOKEN; over HTTP each session starts
+ * unauthenticated and the operator connects through the device flow.
  */
 async function main(): Promise<void> {
   const config = loadConfig();
+  const mode = resolveMode(process.argv.slice(2));
 
-  const server = createServer(config);
-  const transport = new StdioServerTransport();
+  if (mode === "http") {
+    startHttpServer(config);
+    return;
+  }
 
-  await server.connect(transport);
+  // stdio: NOTHING may be written to stdout except MCP protocol frames. stdout
+  // IS the transport; a stray console.log corrupts the stream and the client
+  // drops the connection with a parse error. Diagnostics go to stderr.
+  const tokens = new SessionTokens(config.token);
+  const server = createServer(config, tokens);
+  await server.connect(new StdioServerTransport());
 
   console.error(
-    `[${SERVER_NAME} ${SERVER_VERSION}] ready on stdio → ${config.apiUrl}`
+    `[${SERVER_NAME} ${SERVER_VERSION}] ready on stdio → ${config.apiUrl}` +
+      (config.token ? " (token from env)" : " (no token — run connect_account)")
   );
 
   const shutdown = (signal: string) => {
@@ -36,6 +46,9 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(`[${SERVER_NAME}] failed to start:`, err instanceof Error ? err.message : err);
+  console.error(
+    `[${SERVER_NAME}] failed to start:`,
+    err instanceof Error ? err.message : err
+  );
   process.exit(1);
 });
