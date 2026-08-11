@@ -52,6 +52,35 @@ export function startHttpServer(config: Config): void {
     });
   });
 
+  /**
+   * Domain-ownership proof for the ChatGPT plugin directory.
+   *
+   * OpenAI issues a challenge string in the submission portal and then fetches
+   * it back from this exact path on the host the submitted MCP URL points at —
+   * `mcp.dreamboothstudio.com`. If the portal asks for the apex domain instead,
+   * the same route has to exist in the Studio; this one only proves the
+   * subdomain.
+   *
+   * Served as text/plain and unauthenticated by necessity: the whole point is
+   * that an anonymous fetch from OpenAI can read it. It holds no secret — a
+   * challenge string proves possession of the host, and anyone who can read it
+   * already reached the host.
+   *
+   * Registered ahead of the JSON body parser and the transport for the same
+   * reason /health is: nothing about MCP or sessions should be able to break
+   * a verification fetch.
+   */
+  app.get("/.well-known/openai-apps-challenge", (_req, res) => {
+    if (!config.openaiAppsChallenge) {
+      // 404 rather than an empty 200: an empty body reads to the verifier as
+      // "wrong value" and to us as "route is broken", which are very different
+      // problems. A 404 says plainly that nothing is configured yet.
+      res.status(404).type("text/plain").send("not configured");
+      return;
+    }
+    res.type("text/plain").send(config.openaiAppsChallenge);
+  });
+
   app.use(express.json({ limit: "4mb" }));
 
   const handle: express.RequestHandler = async (req, res) => {

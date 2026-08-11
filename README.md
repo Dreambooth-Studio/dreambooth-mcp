@@ -89,6 +89,8 @@ Dockerfile, no CI, and no volume — this service is stateless.
 
 Set `DREAMBOOTH_API_URL` and `ALLOWED_HOSTS`. There is no token to configure.
 Leave `MCP_DIAGNOSTICS` unset in production — see the tools section.
+`OPENAI_APPS_CHALLENGE` is set only while a directory submission is in flight —
+see [`docs/chatgpt-listing.md`](docs/chatgpt-listing.md).
 
 `ALLOWED_HOSTS` must list **both** public hostnames:
 

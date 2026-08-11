@@ -24,6 +24,12 @@ export interface Config {
    * nothing an operator asked. Turn it on only to run the session-reuse test.
    */
   diagnostics: boolean;
+  /**
+   * Challenge string issued by the ChatGPT plugin submission portal, served
+   * back at /.well-known/openai-apps-challenge to prove we own the host. Empty
+   * until a submission is in flight; the route 404s rather than serving blank.
+   */
+  openaiAppsChallenge: string;
 }
 
 /**
@@ -65,6 +71,9 @@ export function loadConfig(): Config {
     diagnostics: ["1", "true", "yes"].includes(
       (process.env.MCP_DIAGNOSTICS || "").trim().toLowerCase()
     ),
+    // Trimmed because this gets pasted out of a web form, and a trailing
+    // newline would fail the verification with no visible difference.
+    openaiAppsChallenge: (process.env.OPENAI_APPS_CHALLENGE || "").trim(),
   };
 }
 
