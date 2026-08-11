@@ -92,7 +92,7 @@ export function pollDeviceFlowInBackground(
       if (res.ok) {
         const data = (await res.json()) as StatusResponse;
         if (data.status === "completed" && data.sessionToken) {
-          tokens.set(data.sessionToken);
+          tokens.set(data.sessionToken, data.user?.email);
           log("device flow completed");
           return;
         }

@@ -19,6 +19,32 @@ export const searchDocsInput = {
   limit: z.number().int().min(1).max(10).optional().describe("Max results (default 5)"),
 };
 
+/**
+ * Output schemas, on every tool, for three readers: ChatGPT's plugin review
+ * requires "explicit input and output schemas", widgets get a contract for the
+ * `structuredContent` they render, and the model gets to know the shape before
+ * it calls.
+ *
+ * They are deliberately PERMISSIVE. The SDK validates `structuredContent`
+ * against this and throws `McpError` on a mismatch — a protocol error, which
+ * rule #5 of the README exists to prevent, because clients respond to those by
+ * retrying rather than by relaying. Anything the Studio owns is therefore
+ * `.optional()`: a field it renames must degrade to a missing key, never to a
+ * broken tool. Only values this file constructs itself are required.
+ */
+export const searchDocsOutput = {
+  locale: z.string(),
+  query: z.string(),
+  resultCount: z.number(),
+  results: z.array(
+    z.object({
+      title: z.string().optional(),
+      href: z.string().optional(),
+      excerpt: z.string(),
+    })
+  ),
+};
+
 interface DocPage {
   slug: string;
   title: string;
@@ -59,6 +85,7 @@ export function buildSearchDocs(studio: StudioClient) {
       description:
         "Search the Dreambooth Studio documentation and FAQ. Call this before answering any question about the product, pricing, packages, hardware, printing, subscriptions, or troubleshooting — answer from the docs rather than from memory. Works without a connected account.",
       inputSchema: searchDocsInput,
+      outputSchema: searchDocsOutput,
     },
     handler: async (args: { query: string; locale?: "en" | "id"; limit?: number }) => {
       const locale = args.locale ?? "en";

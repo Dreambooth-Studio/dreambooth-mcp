@@ -12,9 +12,10 @@
     "dev:stdio": "tsx src/index.ts --stdio",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js --http",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
     "inspect": "tsx scripts/smoke.ts",
-    "inspect:http": "tsx scripts/smoke-http.ts"
+    "inspect:http": "tsx scripts/smoke-http.ts",
+    "preview": "tsx scripts/preview.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

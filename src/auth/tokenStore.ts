@@ -13,6 +13,12 @@
  */
 export class SessionTokens {
   private token: string | null = null;
+  /**
+   * The account the token belongs to, purely so the connected card can say
+   * whose it is. Never used to scope a request — the Studio resolves the
+   * operator from the token itself.
+   */
+  private email: string | null = null;
   /** Device-flow state we are still waiting on, if any. */
   private pendingState: string | null = null;
   private pendingSince: number | null = null;
@@ -26,8 +32,13 @@ export class SessionTokens {
     return this.token;
   }
 
-  set(token: string): void {
+  getEmail(): string | null {
+    return this.email;
+  }
+
+  set(token: string, email?: string | null): void {
     this.token = token;
+    this.email = email ?? null;
     this.pendingState = null;
     this.pendingSince = null;
     this.lastError = null;
@@ -35,6 +46,7 @@ export class SessionTokens {
 
   clear(): void {
     this.token = null;
+    this.email = null;
   }
 
   startPending(state: string): void {
@@ -47,6 +59,26 @@ export class SessionTokens {
     this.pendingState = null;
     this.pendingSince = null;
     this.lastError = reason;
+  }
+
+  /**
+   * Machine-readable phase, for the connect card's state machine.
+   *
+   * Separate from `describe()` because a widget needs to branch on the state
+   * and a model needs a sentence; deriving one from the other by parsing
+   * English is how a UI ends up broken by a copy edit.
+   */
+  phase(): "connected" | "waiting" | "expired" | "idle" {
+    if (this.token) return "connected";
+    if (this.pendingState) return "waiting";
+    if (this.lastError) return "expired";
+    return "idle";
+  }
+
+  /** Seconds the current device flow has been waiting, if one is running. */
+  waitingSeconds(): number | null {
+    if (!this.pendingState || this.pendingSince === null) return null;
+    return Math.round((Date.now() - this.pendingSince) / 1000);
   }
 
   /** Human-readable status for the model to relay when a tool is called too early. */

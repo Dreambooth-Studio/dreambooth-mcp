@@ -22,7 +22,19 @@ interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   tokens: SessionTokens;
   createdAt: number;
+  /** Bumped on every request; the sweep below is the only reader. */
+  lastSeenAt: number;
 }
+
+/**
+ * A session only ever disappeared on explicit close or process restart, which
+ * meant an abandoned tab left a session-equivalent token sitting in memory
+ * forever. Thirty minutes is longer than any plausible gap between two
+ * questions in one conversation, and reconnecting costs the operator about
+ * fifteen seconds.
+ */
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 export function startHttpServer(config: Config): void {
   const app = express();
@@ -47,6 +59,7 @@ export function startHttpServer(config: Config): void {
     const existing = sessionId ? sessions.get(sessionId) : undefined;
 
     if (existing) {
+      existing.lastSeenAt = Date.now();
       await existing.transport.handleRequest(req, res, req.body);
       return;
     }
@@ -74,7 +87,8 @@ export function startHttpServer(config: Config): void {
       enableDnsRebindingProtection: config.allowedHosts.length > 0,
       allowedHosts: config.allowedHosts.length ? config.allowedHosts : undefined,
       onsessioninitialized: (id) => {
-        sessions.set(id, { transport, tokens, createdAt: Date.now() });
+        const now = Date.now();
+        sessions.set(id, { transport, tokens, createdAt: now, lastSeenAt: now });
         console.log(JSON.stringify({ msg: "session opened", sessionId: id }));
       },
       onsessionclosed: (id) => {
@@ -88,7 +102,12 @@ export function startHttpServer(config: Config): void {
       if (id) sessions.delete(id);
     };
 
-    const server = createServer(config, tokens);
+    const server = createServer(config, tokens, {
+      transport: "http",
+      // Read lazily: the id does not exist until the transport has initialised,
+      // which happens after the server is built.
+      sessionId: () => transport.sessionId,
+    });
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   };
@@ -98,6 +117,25 @@ export function startHttpServer(config: Config): void {
   // of the Streamable HTTP contract, not optional extras.
   app.get("/mcp", handle);
   app.delete("/mcp", handle);
+
+  const sweep = setInterval(() => {
+    const cutoff = Date.now() - SESSION_IDLE_MS;
+    for (const [id, entry] of sessions) {
+      if (entry.lastSeenAt > cutoff) continue;
+      sessions.delete(id);
+      // Closing the transport is what drops the token: SessionTokens lives in
+      // the closure of that session's server, so it goes with it.
+      void entry.transport.close();
+      console.log(
+        JSON.stringify({
+          msg: "session evicted (idle)",
+          sessionId: id,
+          idleMinutes: Math.round((Date.now() - entry.lastSeenAt) / 60000),
+        })
+      );
+    }
+  }, SWEEP_INTERVAL_MS);
+  sweep.unref?.();
 
   const server = app.listen(config.port, () => {
     console.log(
@@ -115,6 +153,7 @@ export function startHttpServer(config: Config): void {
   // Railway's SIGTERM turns a deploy into a hang and then a kill.
   const shutdown = (signal: string) => {
     console.log(JSON.stringify({ msg: "shutting down", signal }));
+    clearInterval(sweep);
     for (const entry of sessions.values()) void entry.transport.close();
     sessions.clear();
     server.close(() => process.exit(0));

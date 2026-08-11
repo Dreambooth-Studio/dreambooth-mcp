@@ -20,6 +20,13 @@ export const getGalleryStatsInput = {
     .describe("Count media past its retention window too (default false)"),
 };
 
+/** Counts only — never media. See the note on `searchDocsOutput`. */
+export const getGalleryStatsOutput = {
+  totalCount: z.number(),
+  activeCount: z.number().optional().describe("Still inside the retention window"),
+  expiredCount: z.number().optional().describe("Past retention and no longer downloadable"),
+};
+
 interface GalleryResponse {
   totalCount: number;
   stats?: { totalCount: number; expiredCount: number; activeCount: number };
@@ -33,6 +40,7 @@ export function buildGetGalleryStats(studio: StudioClient) {
       description:
         "How much media this operator's booths have produced: total, still active, and expired past the retention window. Call this when the operator asks how many photos or videos a booth has taken, or whether media is being lost to retention. Returns counts only, not the media itself.",
       inputSchema: getGalleryStatsInput,
+      outputSchema: getGalleryStatsOutput,
     },
     handler: async (args: { projectId?: string; includeExpired?: boolean }) => {
       const data = await studio.get<GalleryResponse>("/api/gallery", {

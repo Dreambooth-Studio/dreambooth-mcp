@@ -54,6 +54,49 @@ async function main(): Promise<void> {
     }
   }
 
+  let failures = 0;
+
+  // Widgets: a tool that points at a `ui://` resource which does not resolve
+  // renders as a blank card with no error anywhere, so check the link both
+  // ways — the tool's pointer, and the resource behind it.
+  const { resources } = await client.listResources();
+  console.log(`${OK}✓${RESET} resources/list returned ${resources.length}`);
+
+  for (const tool of tools) {
+    const meta = (tool as { _meta?: Record<string, unknown> })._meta;
+    const uri = meta?.["ui.resourceUri"] as string | undefined;
+    if (!uri) continue;
+
+    if (meta?.["openai/outputTemplate"] !== uri) {
+      console.log(`${BAD}✗ ${tool.name}: openai/outputTemplate does not match ui.resourceUri${RESET}`);
+      failures++;
+    }
+
+    try {
+      const read = await client.readResource({ uri });
+      const first = read.contents?.[0] as { mimeType?: string; text?: string } | undefined;
+      const html = first?.text ?? "";
+      if (!first?.mimeType?.startsWith("text/html")) {
+        console.log(`${BAD}✗ ${uri}: wrong mimeType (${first?.mimeType})${RESET}`);
+        failures++;
+      } else if (!html.includes("window.__db")) {
+        console.log(`${BAD}✗ ${uri}: document is missing the widget bridge${RESET}`);
+        failures++;
+      } else if (/https?:\/\/(?!127\.|localhost)/.test(html.replace(/https?:\/\/\S*dreambooth\S*/gi, ""))) {
+        // Any absolute URL in the document is a request the CSP will block.
+        console.log(`${BAD}✗ ${uri}: references an external origin${RESET}`);
+        failures++;
+      } else {
+        console.log(
+          `${OK}✓${RESET} ${tool.name} → ${uri} (${(html.length / 1024).toFixed(1)} kB, self-contained)`
+        );
+      }
+    } catch (err) {
+      console.log(`${BAD}✗ ${uri}: unreadable — ${(err as Error).message}${RESET}`);
+      failures++;
+    }
+  }
+
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [
     { name: "search_docs", args: { query: "printer", locale: "en", limit: 2 } },
     { name: "list_projects", args: {} },
@@ -68,12 +111,18 @@ async function main(): Promise<void> {
     { name: "get_gallery_stats", args: {} },
   ];
 
-  let failures = 0;
   for (const call of calls) {
     const result = (await client.callTool({
       name: call.name,
       arguments: call.args,
-    })) as { content?: unknown; isError?: boolean };
+    })) as { content?: unknown; isError?: boolean; structuredContent?: unknown };
+
+    // Widgets read `structuredContent`; text-only clients read `content`. A
+    // success that carries only one of the two is broken for half the hosts.
+    if (!result.isError && result.structuredContent === undefined) {
+      console.log(`${BAD}✗ ${call.name}: success without structuredContent${RESET}`);
+      failures++;
+    }
 
     if (result.isError) {
       // Expected without a token — but it must be a readable sentence, not a stack.
