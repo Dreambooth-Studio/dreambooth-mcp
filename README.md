@@ -10,7 +10,8 @@ Railway config is in place; the deploy waits on the `mcp.dreamboothstudio.com`
 subdomain.
 
 Design: [`docs/dreambooth-mcp-design.md`](../dreambooth-prod/docs/dreambooth-mcp-design.md)
-in the Studio repo.
+in the Studio repo. Inline cards in ChatGPT:
+[`docs/apps-sdk-widgets-plan.md`](docs/apps-sdk-widgets-plan.md).
 
 ---
 
@@ -36,9 +37,13 @@ npm run dev               # Streamable HTTP on PORT (default 8080)
 npm run dev:stdio         # stdio, for Claude Desktop
 
 npm run build
-npm run inspect           # stdio smoke: handshake, tools/list, every tool
+npm run inspect           # stdio smoke: handshake, tools/list, widgets, every tool
 npm run inspect:http      # HTTP smoke: sessions, isolation, unknown-session 404
+npm run preview           # writes each widget state to .preview/ to open in a browser
 ```
+
+`inspect:http` runs `dist/`, so `npm run build` first or you are testing the last
+build rather than your change.
 
 Both smokes run without a token. `search_docs` needs no auth, and the authed
 tools must come back with a readable message naming `connect_account` rather
@@ -72,6 +77,7 @@ Railway, following the `dreambooth-whatsapp` recipe: `railway.json` with
 Dockerfile, no CI, and no volume — this service is stateless.
 
 Set `DREAMBOOTH_API_URL` and `ALLOWED_HOSTS`. There is no token to configure.
+Leave `MCP_DIAGNOSTICS` unset in production — see the tools section.
 
 ### Claude Desktop
 
@@ -105,7 +111,45 @@ forever for a reply on stdin.
 | `get_credits` | `GET /api/credits` | Bearer |
 | `get_wallet_transactions` | `GET /api/wallet-transactions` | Bearer |
 
-That is the complete v1 read set.
+That is the complete v1 read set. Two more tools exist that wrap nothing:
+`connection_status` (is this session authenticated — polled by the connect card)
+and `session_info` (diagnostics, **temporary**, and registered only when
+`MCP_DIAGNOSTICS=1`; delete it once the session-continuity question in the
+widgets plan is answered).
+
+Every tool carries a `title`, an `outputSchema`, and explicit `readOnlyHint` /
+`destructiveHint` / `openWorldHint` annotations. That is not decoration: both
+the Anthropic Connectors Directory and the ChatGPT plugin directory flag a tool
+that is missing any of them, and `session_info` is gated off by default because
+a listing is judged on its tool list and that one answers nothing an operator
+asked.
+
+Output schemas are deliberately **permissive** — every field the Studio owns is
+optional. The SDK validates `structuredContent` against the schema and throws
+`McpError` on a mismatch, which is a protocol error, and rule 5 below exists to
+prevent exactly that. A Studio rename must degrade to a missing key, never to a
+broken tool.
+
+## Inline cards (ChatGPT)
+
+`connect_account` renders a real card — a Google button that notices when the
+operator has finished approving — instead of a URL they have to copy. It is an
+MCP resource (`ui://widget/connect-account.html`) pointed at by `_meta` on the
+tool, per the Apps SDK.
+
+Nothing about this changes other clients. Every tool result carries the payload
+twice: `structuredContent` for widgets, and the same object pretty-printed as
+text `content` for Claude and Gemini, which render no widget. The text block is
+what it always was.
+
+Widgets are self-contained HTML with an **empty CSP on both domain lists**. That
+is load-bearing: a card that cannot reach the network cannot leak the operator's
+session token, and it never needs to, because all of its data arrives through
+`callTool` on the server side. Keep it that way — inline any asset you need.
+
+Design tokens are copied by hand into `src/ui/tokens.ts` from the Studio's
+`tailwind.config.js`, because a sandboxed iframe has no Tailwind. That makes it a
+second copy of the design system; when a brand colour moves, it moves there too.
 
 `get_project` reports `livenessTier`, not the device's `isOnline` field.
 `isOnline` is retained only for back-compat and collapses "quiet because it was

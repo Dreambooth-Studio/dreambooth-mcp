@@ -37,6 +37,19 @@ export const getSessionsInput = {
     .describe("How many sessions to return (default 20, max 100)"),
 };
 
+/** See the note on `searchDocsOutput` for why these are permissive. */
+export const getSessionsOutput = {
+  total: z.number().optional().describe("Sessions matching the filter, across all pages"),
+  returned: z.number().describe("How many are in this response"),
+  totalPages: z.number().optional(),
+  /**
+   * Session documents pass through untouched, so the shape is the Studio's to
+   * define. Pinning it here would make this file a second source of truth that
+   * silently drifts — the exact failure the README's first rule forbids.
+   */
+  sessions: z.array(z.unknown()),
+};
+
 interface SessionsResponse {
   total: number;
   pagination?: { totalPages: number; currentPage: number };
@@ -51,6 +64,7 @@ export function buildGetSessions(studio: StudioClient) {
       description:
         "List the photo sessions recorded on this operator's booths, with totals. Call this when the operator asks how busy a booth has been, how many sessions ran in a period, or wants to inspect individual sessions. Supports date ranges, per-booth filtering, payment status and payment channel. For money totals rather than session counts, use get_revenue_summary instead.",
       inputSchema: getSessionsInput,
+      outputSchema: getSessionsOutput,
     },
     handler: async (args: {
       startDate?: string;

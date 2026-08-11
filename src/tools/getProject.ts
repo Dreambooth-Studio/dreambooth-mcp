@@ -16,6 +16,44 @@ import type { StudioClient } from "../studio/client.js";
  * in context.
  */
 
+/** See the note on `searchDocsOutput` for why every Studio-owned field is optional. */
+export const getProjectOutput = {
+  project: z.object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    slug: z.string().optional(),
+    isActive: z.boolean().optional(),
+    isPublic: z.boolean().optional(),
+    currency: z.string().optional(),
+    country: z.string().optional(),
+    screenSize: z.string().optional(),
+    updatedAt: z.string().optional(),
+  }),
+  deviceCount: z.number(),
+  devices: z.array(
+    z.object({
+      deviceId: z.string().optional(),
+      /**
+       * livenessTier, NOT isOnline. isOnline collapses "quiet because it was
+       * shut down deliberately" into "offline", which is how a healthy fleet
+       * gets reported as broken.
+       */
+      liveness: z.string().optional(),
+      lastSeenAt: z.string().optional(),
+      lastActivityAt: z.string().optional(),
+      closedAt: z.string().nullable().optional(),
+      closedReason: z.string().nullable().optional(),
+      appVersion: z.string().optional(),
+      camera: z.string().optional(),
+      printer: z.string().optional(),
+      internet: z.string().optional(),
+      cpuUsagePercent: z.number().optional(),
+      ramUsagePercent: z.number().optional(),
+      diskFreeGB: z.number().optional(),
+    })
+  ).describe("Empty when device monitoring is unavailable — not an error"),
+};
+
 export const getProjectInput = {
   projectId: z.string().describe("Project id from list_projects"),
 };
@@ -59,6 +97,7 @@ export function buildGetProject(studio: StudioClient) {
       description:
         "Full detail for a single booth: its name, public link, currency, screen size, and the live status of the device running it — whether it is online, when it was last seen, app version, and camera/printer/internet state. Call this when the operator asks about one specific booth, or whether a booth is working. Get the project id from list_projects first.",
       inputSchema: getProjectInput,
+      outputSchema: getProjectOutput,
     },
     handler: async (args: { projectId: string }) => {
       const project = await studio.get<ProjectDoc>("/api/projects", {

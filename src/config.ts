@@ -18,6 +18,12 @@ export interface Config {
    * developer machine.
    */
   allowedHosts: string[];
+  /**
+   * Registers `session_info`, the connection diagnostic. Off by default: a
+   * public directory listing is judged on its tool list, and this one answers
+   * nothing an operator asked. Turn it on only to run the session-reuse test.
+   */
+  diagnostics: boolean;
 }
 
 /**
@@ -53,6 +59,12 @@ export function loadConfig(): Config {
       .split(",")
       .map((h) => h.trim())
       .filter(Boolean),
+    // Opt-in by exact value, not truthiness: MCP_DIAGNOSTICS=0 or =false must
+    // mean off, and with a flag whose whole point is "not in production" the
+    // surprising reading is the dangerous one.
+    diagnostics: ["1", "true", "yes"].includes(
+      (process.env.MCP_DIAGNOSTICS || "").trim().toLowerCase()
+    ),
   };
 }
 

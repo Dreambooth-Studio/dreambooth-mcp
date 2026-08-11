@@ -11,6 +11,19 @@ import type { StudioClient } from "../studio/client.js";
  * "your revenue" is giving a wrong answer with confidence.
  */
 
+/** See the note on `searchDocsOutput`. Ledger rows pass through untouched. */
+export const getWalletTransactionsOutput = {
+  returned: z.number(),
+  total: z.number().optional().describe("Rows matching the filter, across all pages"),
+  /**
+   * True when the row cap was hit, so this is a WINDOW and not the whole
+   * ledger. Without it the model cannot tell a complete list from a truncated
+   * one, and will describe ten rows as "your transactions".
+   */
+  truncated: z.boolean(),
+  transactions: z.array(z.unknown()),
+};
+
 export const getWalletTransactionsInput = {
   limit: z.number().int().min(1).max(50).optional().describe("Max rows (default 10)"),
   from: z.string().optional().describe("Start date, ISO YYYY-MM-DD"),
@@ -30,6 +43,7 @@ export function buildGetWalletTransactions(studio: StudioClient) {
       description:
         "This operator's wallet ledger: gateway earnings, withdrawals and refunds, newest first. Use for questions about the wallet, payouts or withdrawals. Do NOT use it to answer 'how much did I earn' — the wallet excludes cash and voucher income entirely, so for operators who take cash it understates real revenue. Use get_revenue_summary for income.",
       inputSchema: getWalletTransactionsInput,
+      outputSchema: getWalletTransactionsOutput,
     },
     handler: async (args: { limit?: number; from?: string; to?: string }) => {
       const data = await studio.get<WalletResponse>("/api/wallet-transactions", {
