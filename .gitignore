@@ -10,3 +10,14 @@ dist/
 
 *.log
 .DS_Store
+
+# MCP Registry namespace signing key. Whoever holds this can publish any server
+# under com.dreamboothstudio/* — and registry entries cannot be unpublished.
+# This repo is public; a committed key.pem is a permanent namespace takeover.
+key.pem
+
+# mcp-publisher's own artefacts: the downloaded binary and the registry JWT it
+# caches in the working directory after `login`.
+mcp-publisher.exe
+.mcpregistry_token
+
