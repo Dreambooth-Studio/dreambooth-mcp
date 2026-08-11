@@ -76,7 +76,21 @@ function safe<A>(handler: (args: A) => Promise<unknown>) {
  * entities the way a web search would. Both directory reviews require the hint
  * to be present and explicit, and "absent" is not the same claim as "false".
  */
-const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
+/**
+ * `destructiveHint: false` is included even though the MCP spec treats it as
+ * meaningful only when `readOnlyHint` is false — a tool that reads nothing away
+ * cannot destroy anything, so the spec considers it redundant here.
+ *
+ * The ChatGPT submission portal disagrees and rejects any tool missing any of
+ * the three, redundant or not. It is also the more useful claim to a reviewer:
+ * "absent" and "false" read identically to a person but mean different things
+ * to a form.
+ */
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  openWorldHint: false,
+} as const;
 
 /**
  * `connect_account` is the one tool that changes what the session can see, so
