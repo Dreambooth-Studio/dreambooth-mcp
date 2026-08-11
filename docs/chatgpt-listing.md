@@ -21,40 +21,80 @@ before it is pasted into a form nobody else can see. Audited against
 
 **Name:** Dreambooth Studio
 
-**Tagline** (55 char limit — this is 48):
+**Subtitle** — the real portal limit is **30 characters**, not the 55 assumed
+from the docs. This is 26:
 
 ```
-Ask about your photobooths: revenue, sessions, uptime
+Start and run a photobooth
 ```
 
-**Description:**
+Deliberately *not* "Manage your Photobooth". Every tool is read-only; there is
+no write path at all. "Manage" is a claim the connector cannot back, and the
+field's own instructions ask for plain language without misleading claims — a
+reviewer who reads "manage" will try to change a booth setting and find they
+cannot. "Start and run" also carries both audiences, which "manage" does not.
+
+**Description** (1,184 chars):
 
 ```
-Dreambooth Studio runs self-service photobooths. This connector lets you ask
-about your own booths in plain language instead of opening the dashboard.
+Dreambooth Studio is software for running self-service photobooths — the kind you
+find at weddings, events and malls.
 
-Ask how a booth performed last weekend, what you earned this month and through
-which payment channels, how many AI credits you have left, whether a booth is
-online right now, or how much media it has produced. You can also search the
-Dreambooth documentation without connecting an account at all.
+Thinking about starting one? Ask what hardware you need, how the pricing and plans
+work, what a booth costs to run, or how printing and payments are handled. No
+account needed for any of that. When you're ready, you can connect and start a
+14-day Pro trial without leaving the conversation.
 
-Everything it can reach is read-only. The connector cannot change a booth,
-issue a refund, move money, or delete anything, and it can only ever see the
-account you sign in with — your own booths, never another operator's.
+Already running booths? Ask how a booth did last weekend, what you earned this
+month and which payment channels it came through, whether a booth is online right
+now, how many AI credits you have left, or how much media a booth has produced —
+instead of opening the dashboard to look.
 
-Revenue figures come from the same source as the Studio dashboard, so the
-numbers match what you already see there. Where a figure excludes something —
-the wallet ledger does not include cash or voucher income — the connector says
-so rather than presenting a partial number as your total.
+Everything it can reach is read-only. It cannot change a booth, issue a refund,
+move money, or delete anything, and it only ever sees the account you sign in
+with — your own booths, never another operator's.
+
+Revenue figures come from the same source as the Studio dashboard, so the numbers
+match what you already see there. Where a figure leaves something out — the wallet
+ledger doesn't include cash or voucher income — it says so, rather than presenting
+a partial number as your total.
 ```
+
+**Two audiences, on purpose.** An earlier draft addressed existing operators
+only, which undersold the connector as an acquisition channel and is not what
+the code does. Paragraph 2 is factual, not marketing: `search_docs` genuinely
+requires no account and its own description names pricing, packages and
+hardware, and the trial claim is `connect_account`'s own wording — *"approving
+creates one, with a 14-day Pro trial"*.
 
 **Categories:** Productivity, Analytics
 *(second choice if only one is allowed: Productivity)*
 
+### URLs
+
+**Check all four return 200 immediately before submitting.** A reviewer clicks
+every one of them, and a 404 on the support link is a straightforward rejection.
+
+| Portal field | Value |
+|---|---|
+| Website URL | `https://dreamboothstudio.com` |
+| Customer support URL | `https://dreamboothstudio.com/en/docs/getting-started/contact-support` |
+| Privacy policy URL | `https://dreamboothstudio.com/en/privacy` |
+| Terms of Service URL | `https://dreamboothstudio.com/en/terms` |
+
+The support URL is the one with a history, and the only one that has ever 404'd.
+Nothing public existed when this doc was first written — `/en/contact`,
+`/contact` and `/en/support` all bounce to `/login`, which is the wrong answer
+for a field whose entire purpose is "how does someone who cannot sign in get
+help". dreambooth#560 published it.
+
+Do **not** point this field at the site's contact form: per the published-claims
+audit, that form emails nobody. The docs page gives WhatsApp and email directly
+and sidesteps it.
+
 **Documentation URL:** `https://dreamboothstudio.com/en/docs`
-**Privacy policy URL:** `https://dreamboothstudio.com/en/privacy`
-**Terms URL:** `https://dreamboothstudio.com/en/terms`
-**Support contact:** `support@dreamboothstudio.com`
+**Support email:** `support@dreamboothstudio.com` — now the only address in the
+privacy policy too; the Indonesian copy used to give a personal gmail account.
 **Slug:** `dreambooth-studio` — **permanent once published**, like the registry name.
 
 **Icon:** not produced yet. Needs to read at small sizes; the wordmark will not.
@@ -62,17 +102,19 @@ The gradient ring from `src/ui/shell.ts` (`LOGO_SVG`) is the mark to use.
 
 ## 3. Starter prompts
 
-Short, and each one lands on a different tool so the first impression is not
-four variations of the same call.
+Each lands on a different tool, so the first impression is not four variations
+of the same call.
 
-1. `How did my booths do last week?`
-2. `What did I earn this month, and how much of it was cash?`
-3. `Are all my booths online right now?`
-4. `How many AI credits do I have left?`
-5. `Why is my printer not responding?`
+1. `What hardware do I need to start a photobooth business?`
+2. `How much does Dreambooth cost, and what's in each plan?`
+3. `How did my booths do last week?`
+4. `What did I earn this month, and how much of it was cash?`
+5. `Are all my booths online right now?`
 
-The last one needs no account, which makes it the only prompt a brand-new user
-can run before signing in.
+**The first two run without an account** — both are `search_docs`. That ordering
+is deliberate: a prospective user who taps a starter prompt and is immediately
+told to sign in is the fastest way to lose them. An earlier draft led with four
+operator questions and buried the only openable one at position five.
 
 ## 4. Positive test cases (5)
 
