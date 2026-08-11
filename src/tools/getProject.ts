@@ -26,7 +26,27 @@ export const getProjectOutput = {
     isPublic: z.boolean().optional(),
     currency: z.string().optional(),
     country: z.string().optional(),
-    screenSize: z.string().optional(),
+    /**
+     * An object, not a string — `{ width, height }` in the Studio's Project
+     * model. This was declared as z.string() and shipped: tsc does not check an
+     * outputSchema against the handler's return type, the interface twenty
+     * lines below had it right the whole time, and both smokes passed because
+     * neither ever reached this tool's success path. It took one real call.
+     *
+     * The failure mode is why it matters: a mismatch throws McpError, which is
+     * a PROTOCOL error, so clients retry instead of relaying and the operator
+     * sees a hang rather than a message.
+     */
+    screenSize: z
+      .object({ width: z.number().optional(), height: z.number().optional() })
+      .optional()
+      // .catch() is the pattern to copy for any field whose shape the Studio
+      // owns. It keeps the documented shape in the generated JSON Schema — the
+      // model still learns what to expect — while degrading anything
+      // unexpected to undefined instead of throwing. `.optional()` alone only
+      // tolerates absence; it still throws on a type change, and a throw here
+      // is a protocol error, not a tool error.
+      .catch(undefined),
     updatedAt: z.string().optional(),
   }),
   deviceCount: z.number(),

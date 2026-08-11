@@ -27,21 +27,45 @@ const BASE = BASE_RAW.replace(/\/$/, "");
 const client = new McpClient(BASE, SID);
 
 let names = rest.filter((a) => !a.startsWith("--"));
+const needsArgs = [];
+
 if (rest.includes("--all") || names.length === 0) {
   const tools = (await client.rpc("tools/list"))?.result?.tools ?? [];
-  names = tools
+  const readOnly = tools
     .filter((t) => t.annotations?.readOnlyHint)
-    .filter((t) => !/status|info/i.test(t.name))
-    .map((t) => t.name);
-  console.log(`\ndiscovered ${names.length} read-only tools\n`);
+    .filter((t) => !/status|info/i.test(t.name));
+
+  // A tool with required inputs cannot be called with {}. Running it anyway
+  // produces an input-validation error that looks exactly like a broken tool
+  // in the summary — a false failure that hides the real ones. Skip and say so.
+  for (const t of readOnly) {
+    const required = t.inputSchema?.required ?? [];
+    if (required.length) needsArgs.push({ name: t.name, required });
+    else names.push(t.name);
+  }
+
+  console.log(`\ndiscovered ${readOnly.length} read-only tools: ${names.length} callable with no arguments\n`);
+  for (const t of needsArgs) {
+    console.log(`SKIP       ${t.name} — requires ${t.required.join(", ")}; call it explicitly:`);
+    console.log(`           node run-tools.mjs <baseUrl> <sessionId> ${t.name} '{"${t.required[0]}":"..."}'\n`);
+  }
+}
+
+/** An argument object may follow a tool name: `get_project '{"projectId":"x"}'`. */
+function argsFor(index) {
+  const next = names[index + 1];
+  if (next && next.trim().startsWith("{")) return JSON.parse(next);
+  return {};
 }
 
 let pass = 0, schemaFail = 0, toolFail = 0;
 
-for (const name of names) {
+for (let i = 0; i < names.length; i++) {
+  const name = names[i];
+  if (name.trim().startsWith("{")) continue; // consumed as the previous tool's args
   let r;
   try {
-    r = await client.callTool(name, {});
+    r = await client.callTool(name, argsFor(i));
   } catch (err) {
     toolFail++;
     console.log(`TRANSPORT  ${name}\n           ${err.message}\n`);
@@ -56,8 +80,21 @@ for (const name of names) {
   }
 
   if (r?.result?.isError) {
-    toolFail++;
-    console.log(`TOOL-ERROR ${name}\n           ${textOf(r.result).slice(0, 160)}\n`);
+    // Validation failures can arrive as isError CONTENT rather than as a
+    // JSON-RPC error, depending on how the server wraps its handlers. Classify
+    // on the message, not on where it came from — filing a schema bug under
+    // "the API refused" sends you to debug the wrong system entirely.
+    const msg = textOf(r.result);
+    if (/output validation|structured content/i.test(msg)) {
+      schemaFail++;
+      console.log(`SCHEMA-ERR ${name}\n           ${msg.slice(0, 200)}\n`);
+    } else if (/input validation|invalid arguments/i.test(msg)) {
+      toolFail++;
+      console.log(`BAD-ARGS   ${name}\n           ${msg.slice(0, 200)}\n`);
+    } else {
+      toolFail++;
+      console.log(`TOOL-ERROR ${name}\n           ${msg.slice(0, 160)}\n`);
+    }
     continue;
   }
 
