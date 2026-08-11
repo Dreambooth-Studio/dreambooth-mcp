@@ -4,10 +4,16 @@ MCP server for Dreambooth Studio. Lets ChatGPT, Claude and Gemini answer an
 operator's questions about their own booths — "how did my Bandung booth do this
 week?" — by wrapping the Studio API the dashboard already uses.
 
-**Status: Phase 1, not yet deployed.** Streamable HTTP + stdio, eight read-only
-tools, and account connection through the Studio's existing OAuth device flow.
-Railway config is in place; the deploy waits on the `mcp.dreamboothstudio.com`
-subdomain.
+**Status: Phase 1, live at `https://mcp.dreamboothstudio.com/mcp`.** Streamable
+HTTP + stdio, eight read-only tools, and account connection through the Studio's
+existing OAuth device flow. Listed in the official MCP Registry as
+[`com.dreamboothstudio/dreambooth`](https://registry.modelcontextprotocol.io/v0.1/servers?search=com.dreamboothstudio/dreambooth)
+v0.1.0.
+
+Phase 3 hardening — scopes, a token registry, revocation, a 30-day TTL — is
+still outstanding, and the registry listing went out ahead of it. See
+[Connecting an account](#connecting-an-account) for what that does and does not
+expose.
 
 Design: [`docs/dreambooth-mcp-design.md`](../dreambooth-prod/docs/dreambooth-mcp-design.md)
 in the Studio repo.
@@ -63,7 +69,12 @@ Tokens are held **in memory, per MCP session**. A restart means everyone
 reconnects, which is the right trade for v1: there is no credential store to
 protect, and the token is session-equivalent (one year, no scopes, no
 revocation). Hardening — scopes, a token registry, revocation, 30-day TTL — is
-Phase 3, before any public connector listing.
+Phase 3. That was meant to land *before* any public connector listing; the
+registry entry went out first, deliberately. What that does and does not mean:
+the listing publishes a URL, not a credential, and a session that never runs
+`connect_account` can read nothing but `search_docs`. The exposure is unchanged —
+one operator, one browser approval, one in-memory token — it is simply reachable
+by more people now. Phase 3 is still owed.
 
 ## Deploy
 
@@ -73,7 +84,52 @@ Dockerfile, no CI, and no volume — this service is stateless.
 
 Set `DREAMBOOTH_API_URL` and `ALLOWED_HOSTS`. There is no token to configure.
 
+`ALLOWED_HOSTS` must list **both** public hostnames:
+
+```
+ALLOWED_HOSTS=mcp.dreamboothstudio.com,dreambooth-mcp-production.up.railway.app
+```
+
+Railway keeps serving its generated hostname after a custom domain is attached,
+and DNS-rebinding protection is an allow-list, not a filter — naming only one
+host makes the other return 400 on `/mcp`. `/health` keeps answering `ok` either
+way, because it is registered ahead of the transport, so the healthcheck cannot
+tell you this broke. Leaving the variable empty disables the protection entirely
+rather than allowing everything through some safer path.
+
+### Publishing to the registry
+
+`server.json` is the registry manifest. **Entries cannot be unpublished and each
+version is immutable** — a changed URL or a fixed typo means publishing a new
+`version`, never editing the old one.
+
+```bash
+./mcp-publisher validate server.json    # checks against the live registry, publishes nothing
+./mcp-publisher login dns --domain dreamboothstudio.com --private-key "$(openssl pkey -in key.pem -noout -text | grep -A3 priv: | tail -n +2 | tr -d ' :\n')"
+./mcp-publisher publish
+```
+
+Always `validate` first; it is the only step in that sequence you can take back.
+
+The `com.dreamboothstudio` namespace is proved by a TXT record on the **apex**
+(`dreamboothstudio.com`, not the `mcp` subdomain), signed by `key.pem`. That file
+is gitignored and lives on one machine. Losing it is recoverable — generate a new
+Ed25519 pair and replace the TXT record. Leaking it is not: this repo is public,
+and whoever holds it can publish under `com.dreamboothstudio/*` permanently.
+
+### Connecting a client
+
+The hosted server needs no install. In any client that accepts a remote MCP
+server, point it at:
+
+```
+https://mcp.dreamboothstudio.com/mcp
+```
+
 ### Claude Desktop
+
+For running a local checkout — against a preview Studio, or a branch. To use the
+deployed server, add the URL above instead; there is nothing to clone.
 
 Add to `claude_desktop_config.json`. `--stdio` is required — the entry point
 defaults to HTTP, and without it Claude Desktop starts a web server and waits
