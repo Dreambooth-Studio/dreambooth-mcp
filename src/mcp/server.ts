@@ -131,7 +131,7 @@ export function createServer(
 
   // Not read-only: it changes what this session can see, so clients should
   // surface it for approval rather than auto-running it.
-  const connect = buildConnectAccount(config, tokens);
+  const connect = buildConnectAccount(config, tokens, session);
   server.registerTool(
     connect.name,
     withWidget({ ...connect.config, annotations: GRANTS_ACCESS }, CONNECT_WIDGET_URI, {

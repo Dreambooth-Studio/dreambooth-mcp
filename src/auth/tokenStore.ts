@@ -27,6 +27,26 @@ export class SessionTokens {
   // No seed-token constructor on purpose. A session becomes authenticated only
   // by its own operator completing the device flow, so there is no way to
   // pre-load one account's credential into somebody else's session.
+  //
+  // `forRequest` below is not an exception to that rule. The banned thing is a
+  // token from CONFIGURATION, which would authenticate every incoming session
+  // as one account. A token from the caller's own Authorization header is that
+  // caller's credential, scoped to the single request it arrived on, and is how
+  // every stateless HTTP API has always worked.
+
+  /**
+   * A store holding one request's bearer token and nothing else.
+   *
+   * Required because the MCP session is being removed from the protocol
+   * (SEP-2567), so there is no longer anywhere durable to keep a token: it has
+   * to arrive with each request. This is also exactly the shape OAuth needs, so
+   * the stateless path lands before the authorization server does.
+   */
+  static forRequest(token: string): SessionTokens {
+    const store = new SessionTokens();
+    store.token = token;
+    return store;
+  }
 
   get(): string | null {
     return this.token;

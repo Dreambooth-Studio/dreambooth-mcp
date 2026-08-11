@@ -13,6 +13,16 @@ export interface SessionContext {
    * session id at all.
    */
   sessionId: () => string | undefined;
+  /**
+   * True when this request is served with no session at all, so nothing
+   * survives the response.
+   *
+   * It matters to exactly one tool. `connect_account` writes the approved token
+   * into a store that, on this path, is discarded the moment the reply is sent
+   * — so it would hand the operator a link, poll happily in the background, and
+   * never connect anything. Failing loudly beats a link that cannot work.
+   */
+  stateless?: boolean;
 }
 
 export const STDIO_SESSION: SessionContext = {
