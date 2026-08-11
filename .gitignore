@@ -22,3 +22,10 @@ mcp-publisher.exe
 .mcpregistry_token
 
 .preview/
+
+# Built skill archives for the ChatGPT submission portal. Regenerate rather
+# than commit: the sources are in chatgpt-skills/.
+dist-skills/
+
+# Skill archives built for upload, including ones zipped by hand.
+chatgpt-skills/*.zip
