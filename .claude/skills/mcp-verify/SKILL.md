@@ -39,9 +39,21 @@ Step 3 is the one people skip and the one that finds real bugs.
 
 ## Output schemas must be permissive
 
-A mismatch between `structuredContent` and `outputSchema` throws `McpError` — a **protocol** error. Clients respond to those by retrying, not by relaying, so the user sees a hang rather than a message.
+A mismatch between `structuredContent` and `outputSchema` throws `McpError` — a **protocol** error. Clients respond to those by retrying, not by relaying, so the user sees a hang rather than a message. **A wrong output schema is worse than no output schema**: it converts a working tool into a hang.
 
-Every field owned by an upstream API must be `.optional()`. A rename upstream should degrade to a missing key, never a broken tool. Only fields the tool constructs itself should be required.
+`.optional()` is not enough. It tolerates a field being *absent*; it still throws when the field is *present with a different type*. For anything the upstream owns, add `.catch()`:
+
+```ts
+screenSize: z.object({ width: z.number().optional(), height: z.number().optional() })
+  .optional()
+  .catch(undefined)   // documented shape, but degrades instead of throwing
+```
+
+The generated JSON Schema still carries the documented shape, so the model learns what to expect — but an unexpected value becomes `undefined` rather than a protocol error.
+
+**Nothing type-checks an outputSchema against the handler's return.** A real example from this repo: a field was declared `z.string()` while the interface twenty lines below in the same file correctly typed it `{ width, height }`. `tsc` passed, both smoke tests passed, and only a real call against real data caught it — because the smokes never reached that tool's success path.
+
+Verifying against one account is also weaker evidence than it feels. It proves the shapes for *that* account's data. Another operator's legacy records may differ, which is the second reason to use `.catch()` rather than relying on observation.
 
 ## Check the API underneath is actually deployed
 
