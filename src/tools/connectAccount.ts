@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Config } from "../config.js";
 import type { SessionTokens } from "../auth/tokenStore.js";
+import { STDIO_SESSION, type SessionContext } from "../mcp/session.js";
 import { startDeviceFlow, pollDeviceFlowInBackground } from "../auth/deviceFlow.js";
 
 /**
@@ -31,7 +32,11 @@ export const connectAccountOutput = {
  * This tool is NOT read-only — it changes what the session can see — so it does
  * not carry readOnlyHint and clients will surface it for approval.
  */
-export function buildConnectAccount(config: Config, tokens: SessionTokens) {
+export function buildConnectAccount(
+  config: Config,
+  tokens: SessionTokens,
+  session: SessionContext = STDIO_SESSION
+) {
   return {
     name: "connect_account",
     config: {
@@ -42,6 +47,18 @@ export function buildConnectAccount(config: Config, tokens: SessionTokens) {
       outputSchema: connectAccountOutput,
     },
     handler: async () => {
+      // Nothing this tool does can persist on a sessionless request, so say so
+      // rather than returning a link that will silently never connect. This is
+      // what ChatGPT on iOS and macOS hits today: they send no Mcp-Session-Id
+      // on tools/call, and MCP 2026-07-28 removes sessions for everyone.
+      if (session.stateless && !tokens.get()) {
+        return {
+          status: "unsupported_here",
+          message:
+            "This client does not keep a session between messages, so signing in from inside the conversation cannot work here — a link would be approved and then forgotten. Tell the operator to connect Dreambooth from their client's own connector or app settings, which sends the credential with every request. Product, pricing and troubleshooting questions still work without connecting: use search_docs.",
+        };
+      }
+
       if (tokens.get()) {
         return {
           status: "already_connected",

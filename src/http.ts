@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Config } from "./config.js";
 import { SessionTokens } from "./auth/tokenStore.js";
 import { createServer, SERVER_NAME, SERVER_VERSION } from "./mcp/server.js";
@@ -35,6 +36,65 @@ interface SessionEntry {
  */
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+/** `Authorization: Bearer <token>`, or null. Scheme match is case-insensitive. */
+function bearerToken(req: express.Request): string | null {
+  const header = req.headers.authorization;
+  if (!header) return null;
+  const [scheme, token] = header.split(" ");
+  if (!token || scheme.toLowerCase() !== "bearer") return null;
+  return token.trim() || null;
+}
+
+/**
+ * Serves one request with no session at all.
+ *
+ * A fresh server and transport per request sounds wasteful, and is: it builds
+ * the tool registry every time. That is the correct trade for now — it is a few
+ * milliseconds of object construction against a connector that is otherwise
+ * completely broken on ChatGPT for iOS and macOS, and it keeps the stateful
+ * path untouched while the authorization server is built. If the cost ever
+ * shows up in the latency numbers, the registry can be hoisted; the request
+ * still must not share a token store with anything.
+ *
+ * Authentication comes ONLY from this request's own Authorization header.
+ * Nothing is remembered afterwards, which is the whole point: there is no
+ * session for a token to outlive, and no way for one caller's credential to
+ * reach another's request.
+ */
+async function handleStateless(
+  config: Config,
+  req: express.Request,
+  res: express.Response
+): Promise<void> {
+  const token = bearerToken(req);
+  const tokens = token ? SessionTokens.forRequest(token) : new SessionTokens();
+
+  const transport = new StreamableHTTPServerTransport({
+    // undefined is the SDK's documented stateless mode: no session id is
+    // minted, and no initialize handshake is required first.
+    sessionIdGenerator: undefined,
+    enableDnsRebindingProtection: config.allowedHosts.length > 0,
+    allowedHosts: config.allowedHosts.length ? config.allowedHosts : undefined,
+  });
+
+  const server = createServer(config, tokens, {
+    transport: "http",
+    sessionId: () => undefined,
+    stateless: true,
+  });
+
+  // Closed on the response, not after handleRequest returns: the response may
+  // still be streaming SSE frames when that promise resolves, and tearing the
+  // transport down early truncates the reply.
+  res.on("close", () => {
+    void transport.close();
+    void server.close();
+  });
+
+  await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
+}
 
 export function startHttpServer(config: Config): void {
   const app = express();
@@ -104,9 +164,28 @@ export function startHttpServer(config: Config): void {
       return;
     }
 
-    // No session id — this must be an initialize request; anything else is a
-    // client error, and the transport rejects it for us.
+    // No session id, and not an initialize request.
     //
+    // This used to be treated as a client error and the transport answered
+    // `400 Bad Request: Server not initialized`. That assumption is now wrong
+    // in the field and wrong in the spec:
+    //
+    //   - ChatGPT on iOS and macOS sends NO Mcp-Session-Id on tools/call, so
+    //     every tool call from those clients 400s. The connector does not
+    //     degrade there, it fails on the first question.
+    //   - MCP 2026-07-28 removes the header and the initialize handshake
+    //     outright (SEP-2567, SEP-2575), described as "a clean break... with no
+    //     deprecation window".
+    //
+    // So a request without a session is handled statelessly instead: one
+    // throwaway server for this request, authenticated only by the caller's own
+    // Authorization header. That is the shape OAuth will use, so this path is
+    // the one that survives Half 2 rather than being thrown away by it.
+    if (!isInitializeRequest(req.body)) {
+      await handleStateless(config, req, res);
+      return;
+    }
+
     // A session starts unauthenticated and stays that way until its own
     // operator completes connect_account. There is no configuration that can
     // change that.
