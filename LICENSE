@@ -1,0 +1,15 @@
+Copyright (c) 2026 Dreambooth Studio. All rights reserved.
+
+This source is published so that operators and MCP clients can read what they
+are connecting to before they connect. It is not an offer of a license to use,
+copy, modify, or redistribute it.
+
+The service itself is hosted at https://mcp.dreamboothstudio.com/mcp and needs
+no installation. There is nothing to clone in order to use it, and no token to
+configure — accounts connect through the `connect_account` device flow.
+
+Reading the code, and running a local checkout to evaluate or contribute to this
+repository, are both fine. Redistribution or operating a public instance are
+not, without written permission.
+
+Enquiries: https://dreamboothstudio.com
