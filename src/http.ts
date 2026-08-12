@@ -141,6 +141,30 @@ export function startHttpServer(config: Config): void {
     res.type("text/plain").send(config.openaiAppsChallenge);
   });
 
+  /**
+   * Protected-resource metadata, RFC 9728, as the MCP authorization spec
+   * requires.
+   *
+   * This is the signpost: a client that needs to authenticate reads this to
+   * learn WHICH authorization server to talk to. Without it a client knows it
+   * is unauthorised but not where to go, which presents to the operator as a
+   * connector that simply will not connect.
+   *
+   * The authorization server is the Studio, not this service. Users, Google
+   * sign-in and the account model live there; a second identity system here
+   * would be one more thing to keep in sync and one more place to get wrong.
+   */
+  app.get("/.well-known/oauth-protected-resource", (req, res) => {
+    const self =
+      config.allowedHosts[0] ?? req.headers.host ?? "mcp.dreamboothstudio.com";
+    res.json({
+      resource: `https://${self}/mcp`,
+      authorization_servers: [config.apiUrl],
+      scopes_supported: ["booths:read"],
+      bearer_methods_supported: ["header"],
+    });
+  });
+
   app.use(express.json({ limit: "4mb" }));
 
   const handle: express.RequestHandler = async (req, res) => {
