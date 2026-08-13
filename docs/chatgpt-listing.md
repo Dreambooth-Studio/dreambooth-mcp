@@ -219,8 +219,11 @@ dependency.
 ### 7.4 Deploy, in this order
 
 The first submission was reviewed against code that was never deployed —
-`/.well-known/oauth-protected-resource` returned 404 on the live host even
-though it had been committed to `main`. Check, do not assume:
+`/.well-known/oauth-protected-resource` returns 404 on the production host
+because the commit that added it (`45b9536`) sits on an unmerged branch. Two
+MCP branches must reach `main` before any of this is real:
+`feat/oauth-resource-metadata`, then `feat/oauth-resource-server` stacked on
+it. Check, do not assume:
 
 1. **Studio first.** The MCP server's metadata points at an authorization server
    that must already exist, and a discovery chain that dead-ends is worse than
