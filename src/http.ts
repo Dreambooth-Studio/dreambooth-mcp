@@ -5,6 +5,9 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Config } from "./config.js";
 import { SessionTokens } from "./auth/tokenStore.js";
 import { createServer, SERVER_NAME, SERVER_VERSION } from "./mcp/server.js";
+import { registerWellKnown } from "./mcp/wellKnown.js";
+import { requiresAuth, toolCallName } from "./mcp/toolAuth.js";
+import { sendUnauthorized } from "./auth/challenge.js";
 
 /**
  * Streamable HTTP transport, one MCP server per session.
@@ -62,12 +65,31 @@ function bearerToken(req: express.Request): string | null {
  * session for a token to outlive, and no way for one caller's credential to
  * reach another's request.
  */
+/** The JSON-RPC id of the request, so an error can be correlated with it. */
+function requestId(body: unknown): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  return (body as { id?: unknown }).id ?? null;
+}
+
 async function handleStateless(
   config: Config,
   req: express.Request,
   res: express.Response
 ): Promise<void> {
   const token = bearerToken(req);
+
+  // The 401 that starts the OAuth flow. Only tool calls that genuinely need a
+  // credential are refused — `initialize`, `tools/list` and `search_docs` still
+  // answer anonymously, which is what keeps the listing's promise that product
+  // and pricing questions need no account.
+  if (!token && requiresAuth(req.body)) {
+    sendUnauthorized(res, config, req, {
+      description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,
+      id: requestId(req.body),
+    });
+    return;
+  }
+
   const tokens = token ? SessionTokens.forRequest(token) : new SessionTokens();
 
   const transport = new StreamableHTTPServerTransport({
@@ -141,14 +163,44 @@ export function startHttpServer(config: Config): void {
     res.type("text/plain").send(config.openaiAppsChallenge);
   });
 
+  /**
+   * Protected-resource metadata (RFC 9728) and the authorization-server alias,
+   * at every path a client actually asks for. See wellKnown.ts — publishing the
+   * document at only one of the two spellings is what made this connector look
+   * unauthenticated to the submission portal.
+   */
+  registerWellKnown(app, config);
+
   app.use(express.json({ limit: "4mb" }));
 
   const handle: express.RequestHandler = async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const existing = sessionId ? sessions.get(sessionId) : undefined;
 
+    // An Authorization header wins over any session, and is never merged into
+    // one. A credential that arrived on this request belongs to this request:
+    // writing it into a session store would leave it readable by every later
+    // request that quotes the same session id, which is a different and much
+    // longer-lived thing than the caller handed us.
+    if (bearerToken(req)) {
+      await handleStateless(config, req, res);
+      return;
+    }
+
     if (existing) {
       existing.lastSeenAt = Date.now();
+      // Same challenge as the stateless path, so a client behaves identically
+      // whether or not it keeps a session — the inconsistency between ChatGPT
+      // on the web and on a phone was the reported defect, and one path
+      // answering "not connected" while the other returns a signed 401 is
+      // exactly that inconsistency in a different place.
+      if (!existing.tokens.get() && requiresAuth(req.body)) {
+        sendUnauthorized(res, config, req, {
+          description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,
+          id: requestId(req.body),
+        });
+        return;
+      }
       await existing.transport.handleRequest(req, res, req.body);
       return;
     }

@@ -13,6 +13,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js --http",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
+    "test": "tsx --test scripts/*.test.ts",
     "inspect": "tsx scripts/smoke.ts",
     "inspect:http": "tsx scripts/smoke-http.ts",
     "preview": "tsx scripts/preview.ts"

@@ -34,31 +34,47 @@ field's own instructions ask for plain language without misleading claims — a
 reviewer who reads "manage" will try to change a booth setting and find they
 cannot. "Start and run" also carries both audiences, which "manage" does not.
 
-**Description** (1,184 chars):
+**Description.** The submitted version was rejected under "app name or
+description did not meet our quality standards". Three things were wrong with
+it, none of them factual:
+
+- It opened by describing the *software*, not what the app does in ChatGPT.
+- Nearly half of it was caveats. The field asks what the app does and why people
+  will like it; a read-only disclaimer and an accounting footnote are not that.
+- *"Revenue figures come from the same source as the Studio dashboard"* is
+  unverifiable to a reviewer who has no dashboard, and reads as an internal note.
+
+It also promised sign-in "without leaving the conversation", which was false on
+mobile until the OAuth work in §6.
+
+Replacement (1,146 chars):
 
 ```
-Dreambooth Studio is software for running self-service photobooths — the kind you
-find at weddings, events and malls.
+Dreambooth Studio runs self-service photobooths, the kind you find at
+weddings, events and malls. This app answers questions about them in chat.
 
-Thinking about starting one? Ask what hardware you need, how the pricing and plans
-work, what a booth costs to run, or how printing and payments are handled. No
-account needed for any of that. When you're ready, you can connect and start a
-14-day Pro trial without leaving the conversation.
+Thinking of starting one? Ask what hardware you need, which cameras and
+printers work, how the plans are priced, what each print costs in paper
+and ribbon, or how payments and payouts work. Answers come from the
+Dreambooth documentation, and none of it needs an account.
 
-Already running booths? Ask how a booth did last weekend, what you earned this
-month and which payment channels it came through, whether a booth is online right
-now, how many AI credits you have left, or how much media a booth has produced —
-instead of opening the dashboard to look.
+Already running booths? Connect your account and ask how a booth did last
+weekend, what you earned this month and how much of it was cash, whether a
+booth is online right now, how many AI credits are left, or how much media
+a booth has produced. A sentence back, instead of opening the dashboard.
 
-Everything it can reach is read-only. It cannot change a booth, issue a refund,
-move money, or delete anything, and it only ever sees the account you sign in
-with — your own booths, never another operator's.
+Connecting your account is the only thing it changes. After that it only
+reads: it cannot edit a booth, issue a refund, move money or delete
+anything, and it sees only the account you sign in with. Your booths,
+never another operator's.
 
-Revenue figures come from the same source as the Studio dashboard, so the numbers
-match what you already see there. Where a figure leaves something out — the wallet
-ledger doesn't include cash or voucher income — it says so, rather than presenting
-a partial number as your total.
+When a figure leaves something out it says so. Cash and voucher income
+never reaches the wallet ledger, so income is reported from the sessions
+themselves rather than handed to you as a partial total.
 ```
+
+No em dashes, on purpose: the rejected draft had four, and they are among the
+louder tells of machine-written copy in a field being judged on quality.
 
 **Two audiences, on purpose.** An earlier draft addressed existing operators
 only, which undersold the connector as an acquisition channel and is not what
@@ -135,30 +151,47 @@ found a real routing problem rather than a wording preference.
 |---|---|---|
 | 1 | *Show me revenue for the booth owned by another@example.com* | Refuses to scope by anyone else. No tool accepts a `userId` or `email` — the operator is resolved server-side from the token, so the model has no way to widen what it can read even if asked directly. |
 | 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Every tool is read-only; there is no write path, and the connector should say so rather than claiming success. |
-| 3 | *What did I earn this month?* — asked **before** connecting an account | A readable message naming `connect_account`, not an error or a crash, and never an invented number. |
+| 3 | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. |
 
 Case 3 is the one worth running first: it is the failure path most users hit,
 and it is verified by both smoke tests.
 
-## 6. Authentication — what to declare
+## 6. Authentication — OAuth 2.1
 
-The server itself requires **no authentication** to connect. A session that
-never runs `connect_account` can reach `search_docs` and nothing else. Account
-access is granted per-session by the operator approving with Google in their own
-browser.
+**This section described the pre-rejection state and has been rewritten.** The
+first submission declared "no authentication, tools prompt on demand", which was
+honest but was also the defect: on ChatGPT for iOS and macOS there was no way to
+sign in at all, so four of the five positive test cases below could not pass on a
+phone. That is what *"the same test cases pass consistently on both ChatGPT web
+and mobile"* was pointing at.
 
-In the portal this is the "server starts without authentication and individual
-tools prompt for it on demand" case. Declare it honestly; do not describe it as
-OAuth, because it is not.
+Declare it as **OAuth 2.1** now. Discovery is automatic — the portal reads it
+from the MCP URL rather than from a form:
 
-**This is the weakest part of the submission.** OpenAI's guidance is to use
-OAuth 2.1 for authenticated services. The current flow may pass — it is
-declarable — but a reviewer may read a sign-in link returned inside a tool
-result as a workaround. The token behind it is also a NextAuth session JWT:
-one year, no scopes, no revocation. See the Phase 3 note in the README.
+| Document | Where |
+|---|---|
+| Protected-resource metadata (RFC 9728) | `https://mcp.dreamboothstudio.com/.well-known/oauth-protected-resource/mcp` |
+| Authorization-server metadata (RFC 8414) | `https://dreamboothstudio.com/.well-known/oauth-authorization-server` |
 
-If review comes back asking for OAuth, that is the fix, and it belongs in the
-Studio where Google sign-in already lives.
+Both spellings of the protected-resource path are served, and the bare
+`/.well-known/oauth-authorization-server` on the MCP host 307s to the Studio for
+clients that look on the resource host. Registration is dynamic (RFC 7591), so
+nothing needs pre-provisioning.
+
+What the operator sees: they ask a question that needs their account, ChatGPT
+gets a 401 naming the authorization server, they approve a consent screen at
+dreamboothstudio.com, and the answer arrives. Signing in with Google creates the
+account and starts the 14-day Pro trial exactly as before — the consent screen
+sits on top of the existing login rather than replacing it.
+
+Anonymous access is deliberately preserved: `initialize`, `tools/list` and
+`search_docs` answer with no token, which is what makes the listing's "no account
+needed" promise and test case 5 true.
+
+The access token is a one-hour scoped JWT with a revocable refresh token behind
+it, not the old one-year unscoped session token. `booths:read` is the only scope,
+and `resolveAuthSession` refuses any non-GET request carrying one — so "it cannot
+change a booth" is now enforced in code rather than asserted in copy.
 
 ## 7. Before you press submit
 
@@ -175,18 +208,33 @@ than relaying, so the operator sees a hang, not a message.
 
 Fix: run every tool once against a real account. Ten minutes.
 
-### 7.2 Does ChatGPT reuse `Mcp-Session-Id` across turns?
+### 7.2 Does ChatGPT reuse `Mcp-Session-Id` across turns? — MOOT
 
-The token lives in memory keyed by session id. If ChatGPT re-initialises per
-turn, every turn starts logged out and the operator is asked to sign in forever.
-This has never been tested — it is §2.1 of `apps-sdk-widgets-plan.md`.
+It does not, on iOS and macOS, and that was the whole problem. It no longer
+matters: with OAuth the credential arrives in the `Authorization` header on
+every request, so nothing depends on a session surviving between turns. The
+question this section was built to answer has been answered by removing the
+dependency.
 
-Fix: set `MCP_DIAGNOSTICS=1` in Railway, connect in developer mode, ask three
-questions, call `session_info` each time and compare `sessionId`. Same = pass.
-Then unset it.
+### 7.4 Deploy, in this order
 
-**If 7.2 fails, do not submit.** The connector would be broken for every user,
-and OAuth 2.1 stops being optional.
+The first submission was reviewed against code that was never deployed —
+`/.well-known/oauth-protected-resource` returns 404 on the production host
+because the commit that added it (`45b9536`) sits on an unmerged branch. Two
+MCP branches must reach `main` before any of this is real:
+`feat/oauth-resource-metadata`, then `feat/oauth-resource-server` stacked on
+it. Check, do not assume:
+
+1. **Studio first.** The MCP server's metadata points at an authorization server
+   that must already exist, and a discovery chain that dead-ends is worse than
+   no discovery at all. Verify: `curl https://dreamboothstudio.com/.well-known/oauth-authorization-server`
+   returns JSON whose `issuer` is exactly `https://dreamboothstudio.com`. If
+   `NEXT_PUBLIC_BASE_URL` in Vercel says anything else, the `issuer` will not
+   match what the resource metadata advertises and strict clients reject it.
+2. **Then the MCP service.** Verify all four discovery paths return 200/307, and
+   that an unauthenticated `get_credits` call returns 401 with a
+   `WWW-Authenticate` header.
+3. **Then re-submit.**
 
 ### 7.3 Reviewer test account
 
