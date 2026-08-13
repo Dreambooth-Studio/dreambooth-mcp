@@ -47,15 +47,20 @@ export function buildConnectAccount(
       outputSchema: connectAccountOutput,
     },
     handler: async () => {
-      // Nothing this tool does can persist on a sessionless request, so say so
-      // rather than returning a link that will silently never connect. This is
-      // what ChatGPT on iOS and macOS hits today: they send no Mcp-Session-Id
-      // on tools/call, and MCP 2026-07-28 removes sessions for everyone.
+      // Nothing this tool does can persist on a sessionless request: the token
+      // store is discarded with the response, so a link handed out here would
+      // be approved and then forgotten.
+      //
+      // That is no longer a dead end. This server is an OAuth 2.1 protected
+      // resource, so the client has its own sign-in path — it gets a 401
+      // naming the authorization server the moment it calls a tool that needs
+      // an account. Point at that rather than at a link this tool cannot make
+      // work.
       if (session.stateless && !tokens.get()) {
         return {
-          status: "unsupported_here",
+          status: "use_client_sign_in",
           message:
-            "This client does not keep a session between messages, so signing in from inside the conversation cannot work here — a link would be approved and then forgotten. Tell the operator to connect Dreambooth from their client's own connector or app settings, which sends the credential with every request. Product, pricing and troubleshooting questions still work without connecting: use search_docs.",
+            "This client signs in through its own connector settings rather than through a link in the conversation, and it will prompt automatically the next time an account is needed — ask them to connect Dreambooth there and then repeat their question. Approving creates an account with a 14-day Pro trial if they do not have one. Product, pricing and troubleshooting questions need no account at all: use search_docs.",
         };
       }
 
