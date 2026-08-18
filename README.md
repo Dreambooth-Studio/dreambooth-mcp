@@ -10,10 +10,17 @@ connection through the Studio's existing OAuth device flow. Listed in the offici
 [`com.dreamboothstudio/dreambooth`](https://registry.modelcontextprotocol.io/v0.1/servers?search=com.dreamboothstudio/dreambooth)
 v0.1.0.
 
-Phase 3 hardening — scopes, a token registry, revocation, a 30-day TTL — is
-still outstanding, and the registry listing went out ahead of it. See
-[Connecting an account](#connecting-an-account) for what that does and does not
-expose.
+Phase 3 hardening has since **landed**, on the OAuth path: the Studio runs a
+full OAuth 2.1 authorization server — PKCE S256 only, one-hour access tokens,
+30-day refresh, dynamic client registration, RFC 8707 resource audience,
+RFC 7009 revocation, and a CSRF-bound consent screen that names the scopes
+being granted. This server is a protected resource in front of it (RFC 9728).
+Both discovery documents are live.
+
+The **device flow is the older path and keeps the older properties** — its
+token is a year long, unscoped and unrevocable. That asymmetry is the reason
+the two write tools are registered only on the OAuth path; see
+[Connecting an account](#connecting-an-account).
 
 Design: [`docs/dreambooth-mcp-design.md`](../dreambooth-prod/docs/dreambooth-mcp-design.md)
 in the Studio repo. Inline cards in ChatGPT:
@@ -70,16 +77,26 @@ in HTTP mode it would authenticate every incoming session as that one account.
 Approving in a browser after a restart takes about fifteen seconds; that is the
 whole cost of not having it.
 
-Tokens are held **in memory, per MCP session**. A restart means everyone
-reconnects, which is the right trade for v1: there is no credential store to
-protect, and the token is session-equivalent (one year, no scopes, no
-revocation). Hardening — scopes, a token registry, revocation, 30-day TTL — is
-Phase 3. That was meant to land *before* any public connector listing; the
-registry entry went out first, deliberately. What that does and does not mean:
-the listing publishes a URL, not a credential, and a session that never runs
-`connect_account` can read nothing but `search_docs`. The exposure is unchanged —
-one operator, one browser approval, one in-memory token — it is simply reachable
-by more people now. Phase 3 is still owed.
+Device-flow tokens are held **in memory, per MCP session**. A restart means
+everyone reconnects, which is the right trade for that path: there is no
+credential store to protect. The token itself is session-equivalent — one year,
+no scopes, no revocation — and that has not changed.
+
+What changed is that it is no longer the only way in. A client that arrives
+with its own `Authorization: Bearer` is on the **OAuth path**, where the token
+expires in an hour, carries a scope the operator approved by name, and can be
+revoked at `/api/oauth/revoke`. Nothing is stored here on that path at all: the
+credential belongs to the request that carried it and is never written into a
+session, where a later request quoting the same session id could read it.
+
+The two credentials are deliberately **not** equivalent in what they may do. The
+write tools exist only on the OAuth path, and the Studio refuses a non-GET from
+a device-flow token on any route that opted into connector writes — the weaker
+credential must not inherit access granted to the stronger one. Everything the
+booth fleet POSTs with that token is untouched.
+
+Reading is unchanged on both: a session that never connects an account can read
+nothing but `search_docs`.
 
 ## Deploy
 

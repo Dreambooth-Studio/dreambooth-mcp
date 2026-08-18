@@ -149,7 +149,7 @@ found a real routing problem rather than a wording preference.
 | 4 | *How many AI credits do I have left and what plan am I on?* | `get_credits` | Credit balance and plan name. Credits must not be described as money. |
 | 5 | *My printer stopped responding mid-session — what do I do?* | `search_docs` | Steps from the documentation, **with no account connected**. |
 | 6 | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated. The card shows a preview swatch. Asking twice makes two filters — that is honest, not a bug, and `idempotentHint` says so. |
-| 7 | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created **inactive** and named `<original>-copy`. It must resolve the booth by name to an id first; the operator will never say an id. |
+| 7 | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created and named `<original>-copy`, carrying the original's settings but **not** its public slug. It must resolve the booth by name to an id first; the operator will never say an id. |
 
 ## 5. Negative test cases (4)
 

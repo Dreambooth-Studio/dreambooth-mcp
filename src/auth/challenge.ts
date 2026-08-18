@@ -1,5 +1,6 @@
 import type express from "express";
 import type { Config } from "../config.js";
+import { SCOPE_STRING } from "./scopes.js";
 
 /**
  * The 401 that starts an OAuth flow.
@@ -40,10 +41,15 @@ export function sendUnauthorized(
     .status(401)
     .set(
       "WWW-Authenticate",
+      // `scope` is the second way a client learns what it may ask for, and for
+      // some clients the only one — not every client fetches the resource
+      // metadata document before building its authorization request. Omitting
+      // it while the tools that need `booths:write` are registered is how a
+      // connector ends up with a token that can only ever be refused.
       `Bearer realm="dreambooth", error="${error}", error_description="${description.replace(
         /"/g,
         "'"
-      )}", resource_metadata="${resourceMetadataUrl(config, req)}"`
+      )}", scope="${SCOPE_STRING}", resource_metadata="${resourceMetadataUrl(config, req)}"`
     )
     // A JSON-RPC body as well as the status line: a client that handles the 401
     // uses the header, and one that does not at least surfaces a sentence

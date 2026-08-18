@@ -261,6 +261,28 @@ koneksi read-only tetap **melihat** tool-nya, dan baru tahu waktu memanggil.
 Itu gagal dengan bersih, kalimatnya menyebut cara memperbaikinya, dan
 harganya nol round trip. Baris di §10 sudah disesuaikan.
 
+### 5.7 Yang berubah saat ditinjau: duplikat itu **aktif**, dan slug-nya dibuang
+
+Dokumen ini, deskripsi tool, README dan uji kasus 7 di `chatgpt-listing.md`
+semuanya bilang salinan booth dibuat **tidak aktif**. Itu salah. Cabang
+duplicate menyebar `...sourceProject.toObject()`, dan sumbernya dicari dengan
+`isActive: true`, jadi salinannya ikut aktif. `isActive` di `models/Project.ts`
+memang bukan sakelar hidup/mati — nilainya `default: true` dan fungsinya
+soft-delete. Salinan dengan `isActive: false` justru akan terbaca sebagai
+terhapus. Jadi yang diperbaiki kalimatnya, bukan kodenya. Mockup di §5.2 masih
+menggambar "belum aktif"; yang benar adalah kartu itu merender apa pun yang
+dikembalikan Studio, dan untuk duplikat nilainya selalu aktif.
+
+Yang **memang** diperbaiki di kode: salinan tidak lagi mewarisi `slug` sumber.
+`slug` itu alamat publik booth (`/api/projects/by-slug`) dan dideklarasikan
+`unique, sparse`. Menyebarnya dari sumber berarti salah satu dari dua hal —
+`save()` melempar duplicate key, atau, kalau indeks itu tidak pernah dibangun
+di database ini, dua proyek menjawab satu URL publik dan salinannya menutupi
+booth aslinya. Setiap booth kelahiran `/new` punya slug, jadi ini kasus biasa,
+bukan kasus pinggir. Perbaikannya ada di Studio (`app/api/projects/route.ts`),
+bukan di sini, karena tombol duplicate di dashboard memanggil route yang sama
+dan bugnya sudah ada di sana sejak sebelum tool ini.
+
 ---
 
 ## 6. Anotasi dan konsekuensi listing

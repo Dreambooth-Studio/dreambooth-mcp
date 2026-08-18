@@ -14,7 +14,15 @@ import type { Config } from "../config.js";
  * this tool does not offer it.
  *
  * The copy is named by the Studio (`<title>-copy`, then `-copy-1`) and arrives
- * inactive, so nothing is live until the operator opens it and says so.
+ * WITHOUT the original's slug, so it does not answer at the original's public
+ * URL and nothing the operator already published is disturbed.
+ *
+ * It does NOT arrive disabled, whatever an earlier draft of this file said.
+ * `isActive` on a project is a soft-delete flag defaulting to true, not a
+ * live/paused switch, and the duplicate inherits it — a copy with
+ * `isActive: false` would read as deleted, not as staged. What actually makes
+ * the copy safe to create is that it reaches no customer until the operator
+ * points a booth at it.
  */
 
 export const duplicateProjectOutput = {
@@ -40,7 +48,7 @@ export function buildDuplicateProject(studio: StudioClient, config: Config) {
     config: {
       title: "Duplicate a booth",
       description:
-        "Copy one of this operator's existing booths, with all of its settings, into a new one. Use it when they want another booth 'like' one they already run — a second location, a one-off event, a variant to experiment on. Call list_projects first to get the project id; the operator will name the booth, not its id. The copy is created inactive and named after the original, so it is safe to make and they can rename it in the dashboard. There is no tool that creates a booth from nothing, and no tool that edits or deletes one.",
+        "Copy one of this operator's existing booths, with all of its settings, into a new one. Use it when they want another booth 'like' one they already run — a second location, a one-off event, a variant to experiment on. Call list_projects first to get the project id; the operator will name the booth, not its id. The copy is named after the original and is not published at the original's public address, so it is safe to make and they can rename it in the dashboard. There is no tool that creates a booth from nothing, and no tool that edits or deletes one.",
       inputSchema: {
         projectId: z
           .string()
