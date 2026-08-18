@@ -16,6 +16,8 @@ import { buildConnectionStatus } from "../tools/connectionStatus.js";
 import { buildSessionInfo } from "../tools/sessionInfo.js";
 import { buildCreateFilter } from "../tools/createFilter.js";
 import { buildDuplicateProject } from "../tools/duplicateProject.js";
+import { buildGenerateFrame } from "../tools/generateFrame.js";
+import { buildCheckGeneration } from "../tools/checkGeneration.js";
 import { registerWidget, withWidget, widgetAccessible } from "./widgets.js";
 import { CONNECT_WIDGET_URI, connectAccountWidgetHtml } from "../ui/connectAccount.js";
 import { WRITE_RESULT_WIDGET_URI, writeResultWidgetHtml } from "../ui/writeResult.js";
@@ -302,6 +304,36 @@ export function createServer(
         invoked: "Booth diduplikat",
       }),
       safe(duplicateProject.handler)
+    );
+
+    /**
+     * Frame generation is the one pair here, because it cannot answer in one
+     * call — the Studio route declares maxDuration 120 and this service times
+     * out at 15. `generate_frame` starts the work; `check_generation` reports.
+     *
+     * No widget on `generate_frame`: at the moment it returns, nothing has
+     * been created, and a card is a claim that something has. The result card
+     * belongs on the tool that can actually show a frame.
+     */
+    const generateFrame = buildGenerateFrame(studio, config);
+    server.registerTool(
+      generateFrame.name,
+      { ...generateFrame.config, annotations: CREATES },
+      safe(generateFrame.handler)
+    );
+
+    const checkGeneration = buildCheckGeneration(studio, config);
+    server.registerTool(
+      checkGeneration.name,
+      withWidget(
+        // Reads a status and creates nothing. Saying so is what lets a client
+        // poll without asking the operator each time, which is the only way
+        // polling is tolerable.
+        { ...checkGeneration.config, annotations: READ_ONLY },
+        WRITE_RESULT_WIDGET_URI,
+        { invoking: "Mengecek…", invoked: "Status generasi" }
+      ),
+      safe(checkGeneration.handler)
     );
   }
 

@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.dreamboothstudio/dreambooth",
   "title": "Dreambooth Studio",
-  "description": "Ask about your Dreambooth Studio photobooths — sessions, revenue, credits, projects, device status — and create photo filters or duplicate a booth.",
+  "description": "Ask about your Dreambooth Studio photobooths — sessions, revenue, credits, projects, device status — and create photo filters, design frames or duplicate a booth.",
   "version": "0.2.0",
   "websiteUrl": "https://dreamboothstudio.com",
   "repository": {

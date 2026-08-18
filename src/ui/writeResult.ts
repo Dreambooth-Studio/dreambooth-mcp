@@ -38,6 +38,10 @@ const SCRIPT = `
   var COPY = {
     id: {
       filterMade: "Filter dibuat",
+      frameMade: "Frame dibuat",
+      generating: "Sedang dibuat…",
+      photos: "foto",
+      privateItem: "hanya akun ini",
       boothMade: "Booth diduplikat",
       open: "Buka di dashboard",
       failed: "Tidak jadi dibuat",
@@ -50,6 +54,10 @@ const SCRIPT = `
     },
     en: {
       filterMade: "Filter created",
+      frameMade: "Frame created",
+      generating: "Still generating…",
+      photos: "photos",
+      privateItem: "private to this account",
       boothMade: "Booth duplicated",
       open: "Open in dashboard",
       failed: "Nothing was created",
@@ -62,6 +70,10 @@ const SCRIPT = `
     },
     es: {
       filterMade: "Filtro creado",
+      frameMade: "Marco creado",
+      generating: "Generando…",
+      photos: "fotos",
+      privateItem: "privado de esta cuenta",
       boothMade: "Cabina duplicada",
       open: "Abrir en el panel",
       failed: "No se creo nada",
@@ -243,6 +255,35 @@ const SCRIPT = `
     db.fit();
   }
 
+  function renderFrame(out) {
+    // Running is not a success and must not be drawn as one: at this point
+    // nothing exists, and a card with a checkmark is a claim that it does.
+    if (out.state === "running") {
+      el.innerHTML =
+        '<div class="db-status"><span>' + esc(t.generating) + '</span></div>' +
+        '<p class="db-title" style="margin-top:.5rem">' + esc(out.what || "") + '</p>' +
+        (out.note ? '<p class="db-sub">' + esc(out.note) + '</p>' : '');
+      db.fit();
+      return;
+    }
+    if (out.state !== "done") {
+      renderError(out.error || "");
+      return;
+    }
+
+    var facts = [];
+    if (out.canvasWidth && out.canvasHeight) facts.push(out.canvasWidth + "x" + out.canvasHeight);
+    if (out.placeholderCount) facts.push(out.placeholderCount + " " + t.photos);
+    if (!out.isPublic) facts.push(t.privateItem);
+
+    el.innerHTML =
+      '<div class="db-status db-status--ok">' + CHECK + '<span>' + esc(t.frameMade) + '</span></div>' +
+      '<p class="db-title" style="margin-top:.5rem">' + esc(out.name || out.what || "") + '</p>' +
+      (facts.length ? '<p class="db-sub">' + esc(facts.join(" · ")) + '</p>' : '') +
+      link(out.dashboardUrl);
+    db.fit();
+  }
+
   function renderError(message) {
     // No dashboard link on this branch: there is nothing there to look at, and
     // a link on a failure reads as "it half worked".
@@ -260,6 +301,7 @@ const SCRIPT = `
     }
     if (out.kind === "filter") { renderFilter(out); return; }
     if (out.kind === "booth") { renderBooth(out); return; }
+    if (out.kind === "frame") { renderFrame(out); return; }
     renderError("");
   }
 

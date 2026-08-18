@@ -127,6 +127,38 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
+    file: "write-frame-running-light.html",
+    label: `${WRITE_RESULT_WIDGET_URI} — frame still generating, light`,
+    html: writeResultWidgetHtml,
+    theme: "light",
+    // The state that must NOT look like a success. Nothing exists yet, and a
+    // checkmark here is a claim that something does.
+    toolOutput: {
+      kind: "frame",
+      state: "running",
+      what: '2x6" photo strip frame',
+      note: "Still generating, 34s so far. Nothing has been created yet.",
+    },
+  },
+  {
+    file: "write-frame-done-dark.html",
+    label: `${WRITE_RESULT_WIDGET_URI} — frame created, dark`,
+    html: writeResultWidgetHtml,
+    theme: "dark",
+    toolOutput: {
+      kind: "frame",
+      state: "done",
+      what: "Batik Emas",
+      frameId: "66f1c0ffee0000000000fa11",
+      name: "Batik Emas",
+      isPublic: false,
+      canvasWidth: 600,
+      canvasHeight: 1800,
+      placeholderCount: 3,
+      dashboardUrl: "https://dreamboothstudio.com/dashboard/frames/66f1c0ffee0000000000fa11",
+    },
+  },
+  {
     file: "write-error-dark.html",
     label: `${WRITE_RESULT_WIDGET_URI} — nothing created, dark`,
     html: writeResultWidgetHtml,

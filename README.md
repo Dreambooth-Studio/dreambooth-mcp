@@ -5,7 +5,7 @@ operator's questions about their own booths — "how did my Bandung booth do thi
 week?" — by wrapping the Studio API the dashboard already uses.
 
 **Status: Phase 1, live at `https://mcp.dreamboothstudio.com/mcp`.** Streamable
-HTTP + stdio, eight read-only tools, two that create something, and account
+HTTP + stdio, eight read-only tools, three that create something, and account
 connection through the Studio's existing OAuth device flow. Listed in the official MCP Registry as
 [`com.dreamboothstudio/dreambooth`](https://registry.modelcontextprotocol.io/v0.1/servers?search=com.dreamboothstudio/dreambooth)
 v0.1.0.
@@ -192,6 +192,30 @@ That is the complete read set. Two more wrap a route that creates something:
 |---|---|---|
 | `create_filter` | `POST /api/filters` | Bearer + `booths:write` |
 | `duplicate_project` | `POST /api/projects?duplicate` | Bearer + `booths:write` |
+| `generate_frame` | `POST /api/ai/frames/create` | Bearer + `booths:write` |
+| `check_generation` | nothing — reads this process | Bearer |
+
+`generate_frame` is the only pair here. Frame generation is an image-model
+call and the Studio route declares `maxDuration = 120`, against a 15-second
+request timeout in this service. Raising the timeout would not help: a tool
+call that blocks for two minutes reads as a hung server to every MCP client.
+So it starts the work, returns a job id, and `check_generation` reports —
+the shape `connect_account` already uses for the device flow. Until
+`check_generation` says `done`, **nothing has been created**, and both the
+tool description and the result card say so rather than leaving a model to
+guess.
+
+Jobs live in this process, keyed by a hash of the bearer that started them —
+never the bearer itself, which would mean holding operator credentials for as
+long as the jobs. A restart loses running jobs and the poll says so, pointing
+at the dashboard rather than reporting a failure that may not have happened.
+**Running a second instance would break polling**; the fix at that point is a
+shared store.
+
+It generates at named print sizes rather than at a width and a height the
+model chose. `drawParams.canvasWidth/Height` is the contract the booth prints
+against, and invented numbers produce a frame that is created successfully and
+prints wrong — a failure that reports nothing.
 
 **They are registered only when the request carries its own bearer token** —
 that is, on the OAuth path. On stdio, and on a device-flow HTTP session, they
@@ -203,7 +227,7 @@ the other one. The Studio enforces the same rule independently — see
 for why the gate here cannot check the scope itself.
 
 Nothing edits, nothing deletes, and nothing touches money. There is no `put` or
-`delete` on `StudioClient`, and the Studio opened exactly two POST handlers.
+`delete` on `StudioClient`, and the Studio opened exactly three POST handlers.
 
 Two more tools exist that wrap nothing:
 `connection_status` (is this session authenticated — polled by the connect card)

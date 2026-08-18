@@ -1,5 +1,6 @@
 import type { Config } from "../config.js";
 import { studioErrorFor, StudioError, writeErrorFor } from "./errors.js";
+import { ownerKeyFor } from "../jobs/store.js";
 
 /**
  * The ONLY place this service talks to Dreambooth.
@@ -39,6 +40,22 @@ export class StudioClient {
       );
     }
     return token;
+  }
+
+  /**
+   * Identifies this caller to the job store, without handing out the token.
+   *
+   * Background work outlives the tool call that started it, so something has
+   * to say who may read the result. That something must not be the credential
+   * itself — the job store would then hold operator tokens for as long as it
+   * holds jobs. A hash answers the only question asked and nothing else, and
+   * computing it here means `getToken` stays private.
+   *
+   * Throws the not-connected message if there is no token, which is the same
+   * answer any other call would give.
+   */
+  ownerKey(): string {
+    return ownerKeyFor(this.requireToken());
   }
 
   async get<T>(path: string, query: Record<string, string | undefined> = {}): Promise<T> {

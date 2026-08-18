@@ -25,6 +25,8 @@ export const AUTH_REQUIRED_TOOLS = new Set([
   // Listing them here turns that into the 401 that begins the OAuth flow.
   "create_filter",
   "duplicate_project",
+  "generate_frame",
+  "check_generation",
 ]);
 
 /**
