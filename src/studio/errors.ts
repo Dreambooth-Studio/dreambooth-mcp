@@ -57,3 +57,39 @@ export function studioErrorFor(status: number, route: string): StudioError {
       );
   }
 }
+
+/**
+ * The failure of a request that tried to CREATE something.
+ *
+ * Different from `studioErrorFor` in one way that matters: it reads the
+ * Studio's own `{ error }` body and relays it. Those sentences are product
+ * copy, written to be said to an operator — "this connection is read-only,
+ * reconnect and approve permission to create things" tells them exactly which
+ * button to press, where a generic 403 sends the model off to guess.
+ *
+ * Falls back to the generic mapping when the body is missing or unreadable,
+ * which is what a proxy error or an HTML error page looks like from here.
+ */
+export async function writeErrorFor(res: Response, route: string): Promise<StudioError> {
+  const relayed = await readErrorMessage(res);
+  if (!relayed) return studioErrorFor(res.status, route);
+
+  // Never retryable. Every status this path produces is a decision the Studio
+  // made about the request — read-only connection, an argument it will not
+  // accept, a name already taken — and repeating it produces the same answer,
+  // or worse, a second copy of whatever did get through.
+  return new StudioError(relayed, res.status, false);
+}
+
+/** The `error` field of a JSON body, if there is one and it is a string. */
+async function readErrorMessage(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { error?: unknown; message?: unknown };
+    for (const candidate of [body?.error, body?.message]) {
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

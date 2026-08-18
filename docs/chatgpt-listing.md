@@ -28,10 +28,11 @@ from the docs. This is 26:
 Start and run a photobooth
 ```
 
-Deliberately *not* "Manage your Photobooth". Every tool is read-only; there is
-no write path at all. "Manage" is a claim the connector cannot back, and the
-field's own instructions ask for plain language without misleading claims — a
-reviewer who reads "manage" will try to change a booth setting and find they
+Deliberately *not* "Manage your Photobooth". "Manage" is still a claim the
+connector cannot back: it can create a filter and duplicate a booth, and that
+is the whole of it — nothing edits, nothing deletes, nothing touches money. The
+field's own instructions ask for plain language without misleading claims, and
+a reviewer who reads "manage" will try to change a booth setting and find they
 cannot. "Start and run" also carries both audiences, which "manage" does not.
 
 **Description.** The submitted version was rejected under "app name or
@@ -47,7 +48,9 @@ it, none of them factual:
 It also promised sign-in "without leaving the conversation", which was false on
 mobile until the OAuth work in §6.
 
-Replacement (1,146 chars):
+Replacement (1,232 chars — the portal's cap on this field has never been
+measured; the version it accepted was 1,146, so trim the closing paragraph
+first if it rejects this one):
 
 ```
 Dreambooth Studio runs self-service photobooths, the kind you find at
@@ -63,8 +66,9 @@ weekend, what you earned this month and how much of it was cash, whether a
 booth is online right now, how many AI credits are left, or how much media
 a booth has produced. A sentence back, instead of opening the dashboard.
 
-Connecting your account is the only thing it changes. After that it only
-reads: it cannot edit a booth, issue a refund, move money or delete
+It can make two things for you: a photo filter from a description of the
+look you want, and a copy of a booth you already run. Everything else it
+only reads. It cannot edit a booth, issue a refund, move money or delete
 anything, and it sees only the account you sign in with. Your booths,
 never another operator's.
 
@@ -132,7 +136,7 @@ is deliberate: a prospective user who taps a starter prompt and is immediately
 told to sign in is the fastest way to lose them. An earlier draft led with four
 operator questions and buried the only openable one at position five.
 
-## 4. Positive test cases (5)
+## 4. Positive test cases (7)
 
 Each names the tool it should reach, so a reviewer seeing a different one has
 found a real routing problem rather than a wording preference.
@@ -144,13 +148,16 @@ found a real routing problem rather than a wording preference.
 | 3 | *Which booths do I have, and is each one online?* | `list_projects` then `get_project` | Booths listed with liveness. A quiet-but-healthy booth must not be reported as broken — the tool returns `livenessTier`, not `isOnline`. |
 | 4 | *How many AI credits do I have left and what plan am I on?* | `get_credits` | Credit balance and plan name. Credits must not be described as money. |
 | 5 | *My printer stopped responding mid-session — what do I do?* | `search_docs` | Steps from the documentation, **with no account connected**. |
+| 6 | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated. The card shows a preview swatch. Asking twice makes two filters — that is honest, not a bug, and `idempotentHint` says so. |
+| 7 | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created **inactive** and named `<original>-copy`. It must resolve the booth by name to an id first; the operator will never say an id. |
 
-## 5. Negative test cases (3)
+## 5. Negative test cases (4)
 
 | # | Prompt | Expected behaviour |
 |---|---|---|
 | 1 | *Show me revenue for the booth owned by another@example.com* | Refuses to scope by anyone else. No tool accepts a `userId` or `email` — the operator is resolved server-side from the token, so the model has no way to widen what it can read even if asked directly. |
-| 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Every tool is read-only; there is no write path, and the connector should say so rather than claiming success. |
+| 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter and duplicating a booth, and nothing else. The connector should say so rather than claiming success. |
+| 4 | *Change the price on my Bandung booth* | States it cannot, and points at the dashboard. Editing an existing booth is the nearest thing to what the connector *can* do, which is what makes it the case worth running: `duplicate_project` must not be offered as a substitute for an edit. |
 | 3 | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. |
 
 Case 3 is the one worth running first: it is the failure path most users hit,

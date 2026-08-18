@@ -5,8 +5,8 @@ operator's questions about their own booths — "how did my Bandung booth do thi
 week?" — by wrapping the Studio API the dashboard already uses.
 
 **Status: Phase 1, live at `https://mcp.dreamboothstudio.com/mcp`.** Streamable
-HTTP + stdio, eight read-only tools, and account connection through the Studio's
-existing OAuth device flow. Listed in the official MCP Registry as
+HTTP + stdio, eight read-only tools, two that create something, and account
+connection through the Studio's existing OAuth device flow. Listed in the official MCP Registry as
 [`com.dreamboothstudio/dreambooth`](https://registry.modelcontextprotocol.io/v0.1/servers?search=com.dreamboothstudio/dreambooth)
 v0.1.0.
 
@@ -156,7 +156,7 @@ forever for a reply on stdin.
 }
 ```
 
-## Tools (v1 read-only)
+## Tools
 
 | Tool | Wraps | Auth |
 |---|---|---|
@@ -169,7 +169,26 @@ forever for a reply on stdin.
 | `get_credits` | `GET /api/credits` | Bearer |
 | `get_wallet_transactions` | `GET /api/wallet-transactions` | Bearer |
 
-That is the complete v1 read set. Two more tools exist that wrap nothing:
+That is the complete read set. Two more wrap a route that creates something:
+
+| Tool | Wraps | Auth |
+|---|---|---|
+| `create_filter` | `POST /api/filters` | Bearer + `booths:write` |
+| `duplicate_project` | `POST /api/projects?duplicate` | Bearer + `booths:write` |
+
+**They are registered only when the request carries its own bearer token** —
+that is, on the OAuth path. On stdio, and on a device-flow HTTP session, they
+do not appear in `tools/list` at all. Writing requires a credential that
+expires in an hour, carries a scope and can be revoked; the device flow's token
+is one year, unscoped and unrevocable, and must not inherit access granted to
+the other one. The Studio enforces the same rule independently — see
+`utils/resolveAuthSession.ts` there, and [`docs/write-tools-plan.md`](docs/write-tools-plan.md)
+for why the gate here cannot check the scope itself.
+
+Nothing edits, nothing deletes, and nothing touches money. There is no `put` or
+`delete` on `StudioClient`, and the Studio opened exactly two POST handlers.
+
+Two more tools exist that wrap nothing:
 `connection_status` (is this session authenticated — polled by the connect card)
 and `session_info` (diagnostics, **temporary**, and registered only when
 `MCP_DIAGNOSTICS=1`; delete it once the session-continuity question in the
@@ -195,6 +214,20 @@ operator has finished approving — instead of a URL they have to copy. It is an
 MCP resource (`ui://widget/connect-account.html`) pointed at by `_meta` on the
 tool, per the Apps SDK.
 
+`create_filter` and `duplicate_project` share a second card,
+`ui://widget/write-result.html`. It renders the result and nothing else: what
+was created, a preview swatch for a filter, and a link to it in the dashboard.
+There is no confirmation card and no form — a widget only renders after the
+tool has already written, so confirming would need a second tool that writes
+nothing, and the host's own approval dialog is the real gate. There is no
+"undo" button either: undo means PUT or DELETE, which would widen the scope
+from "create" to "change and delete" for one button.
+
+The swatch is an inline SVG with a CSS `filter` applied, so the empty CSP below
+still holds. It names the adjustments it cannot show — sharpening, noise
+reduction, vignette, grain and every LUT have no CSS equivalent, and a swatch
+that silently drops half a filter is worse than no swatch.
+
 Nothing about this changes other clients. Every tool result carries the payload
 twice: `structuredContent` for widgets, and the same object pretty-printed as
 text `content` for Claude and Gemini, which render no widget. The text block is
@@ -217,7 +250,8 @@ reported as broken.
 The first three needed no Studio change at all. The rest depend on Studio
 work that has now landed: `GET` on `/api/projects`, `/api/credits` and
 `/api/wallet-transactions` accepts `Authorization: Bearer` via
-`resolveAuthSession` (POST/PUT/DELETE deliberately still do not), and
+`resolveAuthSession` (PUT and DELETE deliberately still do not, and POST only
+on the two routes named above, only for a token carrying `booths:write`), and
 `GET /api/me/revenue-summary` is a new owner-scoped endpoint — `/api/analytics/revenue`
 is superadmin-gated and returns 403 to an operator.
 
@@ -239,9 +273,18 @@ the Studio. A tool that needs such an argument is designed wrong.
 3. Return the smallest useful shape. `get_gallery_stats` returns counts, not 12
    media URLs, because the model does not need them and they cost context.
 4. Read-only tools carry `annotations: { readOnlyHint: true }` so clients can
-   auto-approve them. A write tool must not.
-5. Failures go back as `isError` content with a sentence the model can relay —
-   never a protocol error, which just makes clients retry.
+   auto-approve them. A write tool must not, and must also state
+   `idempotentHint` — `create_filter` says `false`, because calling it twice
+   makes two filters and a client that retries a timeout needs to know that.
+5. **`ownerEmail` is not an argument.** The Studio's POST handlers accept it for
+   the dashboard's collaborator path. A tool that forwards it hands the caller a
+   way to write into somebody else's account, so tool bodies are built field by
+   field rather than spread from `args`. The Studio refuses it from a bearer as
+   well; both halves are deliberate.
+6. Failures go back as `isError` content with a sentence the model can relay —
+   never a protocol error, which just makes clients retry. For a write, relay
+   the Studio's own message: "this connection is read-only, reconnect and
+   approve permission to create things" names the button to press.
 
 ## Notes
 

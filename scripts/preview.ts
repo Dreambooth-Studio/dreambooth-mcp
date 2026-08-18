@@ -15,6 +15,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { CONNECT_WIDGET_URI, connectAccountWidgetHtml } from "../src/ui/connectAccount.js";
+import { WRITE_RESULT_WIDGET_URI, writeResultWidgetHtml } from "../src/ui/writeResult.js";
 
 interface Scenario {
   file: string;
@@ -75,6 +76,66 @@ const SCENARIOS: Scenario[] = [
     toolOutput: { status: "awaiting_approval", authUrl: AUTH_URL },
     widgetState: { phase: "expired" },
     replies: { connection_status: { connected: false, phase: "expired" } },
+  },
+  {
+    file: "write-filter-light.html",
+    label: `${WRITE_RESULT_WIDGET_URI} — filter, light`,
+    html: writeResultWidgetHtml,
+    theme: "light",
+    toolOutput: {
+      kind: "filter",
+      id: "66f1c0ffee0000000000beef",
+      name: "Senja Hangat",
+      isPublic: false,
+      // Only CSS-reproducible adjustments: this is the swatch at its best, and
+      // the one to look at when checking that the preview means anything.
+      adjustments: { contrast: 112, saturation: 88, sepia: 18, brightness: 104 },
+      dashboardUrl: "https://dreamboothstudio.com/dashboard/filters/66f1c0ffee0000000000beef",
+    },
+  },
+  {
+    file: "write-filter-partial-dark.html",
+    label: `${WRITE_RESULT_WIDGET_URI} — filter with unpreviewable effects, dark`,
+    html: writeResultWidgetHtml,
+    theme: "dark",
+    toolOutput: {
+      kind: "filter",
+      id: "66f1c0ffee0000000000cafe",
+      name: "Analog Kasar",
+      isPublic: true,
+      // Grain, vignette and clarity have no CSS equivalent. The card must show
+      // the swatch AND say what it left out — checking that is the point of
+      // this scenario.
+      adjustments: { contrast: 118, grain: 40, vignette: 60, clarity: 25, temperature: 15 },
+      dashboardUrl: "https://dreamboothstudio.com/dashboard/filters/66f1c0ffee0000000000cafe",
+    },
+  },
+  {
+    file: "write-booth-light.html",
+    label: `${WRITE_RESULT_WIDGET_URI} — duplicated booth, light`,
+    html: writeResultWidgetHtml,
+    theme: "light",
+    toolOutput: {
+      kind: "booth",
+      id: "66f1c0ffee0000000000f00d",
+      title: "Bandung Expo-copy",
+      slug: "bandung-expo-copy",
+      isActive: false,
+      copiedFrom: { id: "66f1c0ffee0000000000abcd", title: "Bandung Expo" },
+      dashboardUrl:
+        "https://dreamboothstudio.com/dashboard/projects/66f1c0ffee0000000000f00d/editor",
+    },
+  },
+  {
+    file: "write-error-dark.html",
+    label: `${WRITE_RESULT_WIDGET_URI} — nothing created, dark`,
+    html: writeResultWidgetHtml,
+    theme: "dark",
+    // What the host passes when the tool returned isError: no `kind`, so the
+    // card must not render a success it cannot substantiate.
+    toolOutput: {
+      error: "This connection is read-only. Reconnect the app and approve permission to create things.",
+    },
   },
 ];
 

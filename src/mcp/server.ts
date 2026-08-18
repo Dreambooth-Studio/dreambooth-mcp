@@ -14,12 +14,15 @@ import { buildGetCredits } from "../tools/getCredits.js";
 import { buildGetWalletTransactions } from "../tools/getWalletTransactions.js";
 import { buildConnectionStatus } from "../tools/connectionStatus.js";
 import { buildSessionInfo } from "../tools/sessionInfo.js";
+import { buildCreateFilter } from "../tools/createFilter.js";
+import { buildDuplicateProject } from "../tools/duplicateProject.js";
 import { registerWidget, withWidget, widgetAccessible } from "./widgets.js";
 import { CONNECT_WIDGET_URI, connectAccountWidgetHtml } from "../ui/connectAccount.js";
+import { WRITE_RESULT_WIDGET_URI, writeResultWidgetHtml } from "../ui/writeResult.js";
 import { STDIO_SESSION, type SessionContext } from "./session.js";
 
 export const SERVER_NAME = "dreambooth";
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = "0.2.0";
 
 /**
  * Wraps a tool handler so a Studio failure comes back as tool content the model
@@ -102,6 +105,25 @@ const READ_ONLY = {
 const GRANTS_ACCESS = {
   readOnlyHint: false,
   destructiveHint: false,
+  openWorldHint: false,
+} as const;
+
+/**
+ * The write tools. Every claim here is checkable, which is the point.
+ *
+ * `destructiveHint: false` is true and load-bearing: both tools only ever add
+ * a row. Nothing they can do overwrites or removes anything, because the
+ * Studio never opened a PUT or a DELETE to this connection.
+ *
+ * `idempotentHint: false` is the uncomfortable one, and it is stated rather
+ * than hidden: calling create_filter twice makes two filters. A client that
+ * retries a timed-out call will duplicate it, which is why the timeout message
+ * in StudioClient.post tells the model to check rather than repeat.
+ */
+const CREATES = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
   openWorldHint: false,
 } as const;
 
@@ -234,6 +256,54 @@ export function createServer(
     { ...wallet.config, annotations: READ_ONLY },
     safe(wallet.handler)
   );
+
+  /**
+   * The write tools exist only on the OAuth path.
+   *
+   * Not a policy bolted on afterwards — it is the same rule the Studio
+   * enforces, applied one layer earlier. Writing requires an access token that
+   * expires in an hour, carries `booths:write`, and can be revoked. The device
+   * flow's token is none of those: one year, no scope, no revocation. So on
+   * stdio and on a device-flow HTTP session these tools are not registered,
+   * and a model connected that way cannot promise something that would fail.
+   *
+   * What this gate does NOT check is the scope, because it cannot: the token is
+   * a next-auth JWE and this server has no key for it. A read-scoped connection
+   * therefore still SEES the tools and gets a 403 on calling one, with a
+   * sentence naming the fix. Registering them per-scope would mean asking the
+   * Studio on every tools/list — a round trip in front of the cheapest call a
+   * client makes — to prevent a case that already fails cleanly.
+   */
+  if (session.bearerAuth) {
+    registerWidget(server, {
+      uri: WRITE_RESULT_WIDGET_URI,
+      name: "write-result-card",
+      title: "What was created",
+      html: writeResultWidgetHtml,
+      description:
+        "A card confirming what was just created — the filter's name with a preview swatch, or the duplicated booth — and a link to it in the dashboard.",
+    });
+
+    const createFilter = buildCreateFilter(studio, config);
+    server.registerTool(
+      createFilter.name,
+      withWidget({ ...createFilter.config, annotations: CREATES }, WRITE_RESULT_WIDGET_URI, {
+        invoking: "Membuat filter…",
+        invoked: "Filter dibuat",
+      }),
+      safe(createFilter.handler)
+    );
+
+    const duplicateProject = buildDuplicateProject(studio, config);
+    server.registerTool(
+      duplicateProject.name,
+      withWidget({ ...duplicateProject.config, annotations: CREATES }, WRITE_RESULT_WIDGET_URI, {
+        invoking: "Menduplikat booth…",
+        invoked: "Booth diduplikat",
+      }),
+      safe(duplicateProject.handler)
+    );
+  }
 
   return server;
 }

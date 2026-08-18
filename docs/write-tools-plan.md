@@ -1,6 +1,7 @@
 # Tool tulis + kartu hasil (Fase 4)
 
-Status: **rencana**, belum ada kode.
+Status: **terimplementasi** (Fase 4). Yang berubah dari rencana ini saat
+ditulis kodenya dicatat di §5.6 dan §11 — bukan disunting diam-diam.
 Lanjutan dari [rencana widget](apps-sdk-widgets-plan.md), yang §9-nya menyatakan
 "tool tulis apa pun" di luar cakupan. Dokumen ini yang mencabut kalimat itu — dan
 menetapkan syarat-syaratnya.
@@ -117,9 +118,11 @@ dan menolak `source === "bearer"` yang tidak bawa `booths:write`.
 **Prasyarat yang tidak bisa ditawar:** ini semua berlaku hanya untuk jalur
 OAuth. Selama `connect_account` masih jadi satu-satunya cara menyambung di
 stdio, di transport itu tool tulis tidak akan pernah aktif — dan itu benar,
-bukan kekurangan. Tool tulis mendaftar sendiri hanya kalau sesi memegang token
-ber-scope tulis; kalau tidak, ia tidak muncul di `tools/list` sama sekali,
+bukan kekurangan. Tool tulis hanya didaftarkan kalau request datang membawa
+bearer sendiri; kalau tidak, ia tidak muncul di `tools/list` sama sekali,
 sehingga model tidak pernah menjanjikan sesuatu yang pasti gagal.
+
+Gerbang itu **tidak** memeriksa scope-nya, dan tidak bisa — lihat §5.6.
 
 ---
 
@@ -235,6 +238,29 @@ di-pretty-print sebagai teks `content` untuk Claude dan Gemini. Satu tambahan
 kecil — sertakan URL dashboard di dalam objeknya, bukan cuma di HTML kartu,
 supaya klien teks juga bisa menyodorkan tautannya.
 
+### 5.6 Yang berubah saat dikerjakan: gerbang `tools/list`
+
+Rencana ini menyatakan tool tulis tidak muncul di `tools/list` untuk koneksi
+yang cuma `booths:read`. Saat kodenya ditulis, ternyata **server MCP tidak bisa
+tahu scope sebuah token.** Access token itu JWE next-auth yang dienkripsi
+dengan `NEXT_AUTH_SECRET` milik Studio; layanan ini tidak memegang kuncinya dan
+tidak bisa membaca klaim `scope` di dalamnya. Menanyakannya ke Studio berarti
+satu round trip di depan `tools/list` — panggilan paling murah yang dilakukan
+klien — pada setiap request.
+
+Jadi gerbangnya dibelah dua, dan pembagiannya disengaja:
+
+| Yang diperiksa | Di mana | Hasil kalau gagal |
+|---|---|---|
+| Ini jalur OAuth, bukan device flow | `createServer`, dari `bearerAuth` | tool tidak ada di `tools/list` |
+| Token ini punya `booths:write` | Studio, `resolveAuthSession` | 403 berkalimat, dirender kartu error |
+
+Bagian yang benar-benar soal keamanan — token satu tahun tanpa pencabutan tidak
+boleh menulis — dijaga di kedua tempat. Yang longgar cuma bagian kosmetiknya:
+koneksi read-only tetap **melihat** tool-nya, dan baru tahu waktu memanggil.
+Itu gagal dengan bersih, kalimatnya menyebut cara memperbaikinya, dan
+harganya nol round trip. Baris di §10 sudah disesuaikan.
+
 ---
 
 ## 6. Anotasi dan konsekuensi listing
@@ -274,11 +300,16 @@ menolak nama yang sudah dipakai owner yang sama dengan 409 — bukan pengecekan
 di sisi MCP, yang akan jadi sumber kebenaran kedua dan tetap balapan.
 Belum diputuskan; tidak memblokir pilot.
 
-**Rentang `adjustments`.** Model perlu tahu skalanya (0–100? -100–100?
-persen?) untuk menerjemahkan "agak pudar" jadi angka. `models/Filter.ts` cuma
-bilang `Number` tanpa batas. Harus dibaca dari renderer di aplikasi booth
-sebelum deskripsi tool ditulis — deskripsi yang salah skalanya menghasilkan
-filter yang secara teknis berhasil dibuat dan secara visual rusak.
+**Rentang `adjustments`.** ~~Belum diketahui.~~ **Terjawab.** Sumbernya
+`adjustmentRanges` di `app/[locale]/dashboard/filters/[id]/page.tsx` — bukan
+`models/Filter.ts`, yang cuma bilang `Number` tanpa batas. Tiga kelompok:
+`brightness`/`contrast`/`saturation` 0–200 dengan 100 = tidak berubah,
+`temperature`/`exposure`/`shadows` dan kawan-kawan -100–100 dengan 0 = tidak
+berubah, dan `blur` 0–10 dalam piksel. Semuanya masuk ke `inputSchema`
+`create_filter`, bukan cuma ke deskripsi: model sedang menerjemahkan "agak
+pudar" jadi angka dan tidak punya pegangan lain. Salah skala menghasilkan
+filter yang berhasil dibuat dan rusak dilihat — kegagalan yang tidak melaporkan
+apa pun.
 
 ---
 
@@ -295,35 +326,59 @@ filter yang secara teknis berhasil dibuat dan secara visual rusak.
 
 ## 9. Urutan kerja
 
-| # | Pekerjaan | Repo | Bergantung pada |
+| # | Pekerjaan | Repo | Status |
 |---|---|---|---|
-| 0 | Baca skala `adjustments` dari renderer booth (§7) | dreambooth | — |
-| 1 | `booths:write` di `SUPPORTED_SCOPES`, layar consent digerakkan scope | dreambooth | — |
-| 2 | Palang non-GET jadi berbasis scope; device flow ditolak per-route | dreambooth | 1 |
-| 3 | `POST /api/filters` menerima bearer ber-scope tulis | dreambooth | 2 |
-| 4 | `StudioClient.post()` — hari ini cuma ada `get`/`getPublic` | dreambooth-mcp | — |
-| 5 | Widget `write-result` + `create_filter`, hanya terdaftar kalau scope ada | dreambooth-mcp | 3, 4 |
-| 6 | `POST /api/projects?duplicate` menerima bearer + `duplicate_project` | keduanya | 5 sehat |
-| 7 | README, `chatgpt-listing.md`, `server.json` versi baru | dreambooth-mcp | 5 |
-| 8 | `create_project` minimal, kalau masih diinginkan | keduanya | 6 |
+| 0 | Baca skala `adjustments` dari renderer booth (§7) | dreambooth | selesai |
+| 1 | `booths:write` di `SUPPORTED_SCOPES`, layar consent digerakkan scope | dreambooth | selesai |
+| 2 | Palang non-GET jadi berbasis scope; device flow ditolak per-route | dreambooth | selesai |
+| 3 | `POST /api/filters` menerima bearer ber-scope tulis | dreambooth | selesai |
+| 4 | `StudioClient.post()` — sebelumnya cuma ada `get`/`getPublic` | dreambooth-mcp | selesai |
+| 5 | Widget `write-result` + `create_filter`, terdaftar hanya di jalur bearer | dreambooth-mcp | selesai (§5.6) |
+| 6 | `POST /api/projects?duplicate` menerima bearer + `duplicate_project` | keduanya | selesai |
+| 7 | README, `chatgpt-listing.md`, `server.json` v0.2.0 | dreambooth-mcp | selesai |
+| 8 | `create_project` minimal, kalau masih diinginkan | keduanya | **belum, sengaja** |
+
+Nomor 6 dikerjakan berbarengan dengan 5, bukan sesudah pilotnya terbukti sehat
+di lapangan. Alasannya: keduanya memakai gerbang, palang, kartu dan jalur error
+yang persis sama, jadi menundanya tidak menghasilkan bukti baru — yang
+menghasilkan bukti adalah operator sungguhan memakainya, dan itu belum terjadi
+untuk keduanya. Nomor 8 tetap ditahan; alasannya di §4 dan sekarang juga
+ditegakkan oleh Studio (403 kalau bearer memanggil cabang non-duplicate).
 
 ---
 
 ## 10. Daftar periksa verifikasi
 
-- [ ] Token `booths:read` saja: `create_filter` **tidak muncul** di `tools/list`.
-- [ ] Token `booths:read` yang entah bagaimana memanggilnya: 403 dari Studio,
-      dan kembali sebagai `isError` berkalimat, bukan error protokol.
-- [ ] Token device flow: POST tetap ditolak sesudah §2.1 dibongkar.
-- [ ] Telemetri booth (`/api/device-heartbeat`, `/api/print-event-log`,
+Yang bertanda [x] punya tes otomatis yang menjaganya; yang kosong butuh Studio
+yang benar-benar jalan, dan tidak ada satu pun yang sudah dijalankan melawan
+deployment sungguhan.
+
+- [x] Tanpa bearer: `create_filter` dan `duplicate_project` **tidak muncul** di
+      `tools/list`; tool baca tidak terpengaruh.
+      (`scripts/writeTools.test.ts`, plus `tools/list` sungguhan lewat curl.)
+- [x] Token `booths:read` memanggil POST di route yang opt-in: ditolak.
+      (`tests/oauth/bearerPolicy.test.ts` di repo Studio.)
+- [x] Token `booths:write` di route yang **tidak** opt-in: tetap ditolak.
+- [x] Token device flow di route yang opt-in: ditolak (`unscoped`).
+- [x] Telemetri booth (`/api/device-heartbeat`, `/api/print-event-log`,
       `/api/booth-events/batch`) masih menerima POST bearer — armada tidak mati.
-- [ ] `ownerEmail` tidak ada di skema argumen tool mana pun, dan tidak pernah
-      diteruskan ke Studio.
+- [x] `ownerEmail` tidak ada di skema argumen tool mana pun, tidak pernah
+      diteruskan walau model mengarangnya, dan ditolak Studio kalau tetap
+      sampai.
+- [x] Kegagalan tulis kembali sebagai `isError` berkalimat, membawa kalimat
+      Studio sendiri, dan **tidak pernah** `retryable` — termasuk pada 5xx.
+- [x] `create_filter` melaporkan yang disimpan Studio, bukan yang dikirim.
+- [x] Kartu dirender di Chromium untuk empat state (filter, filter dengan efek
+      tak terpratinjau, booth, gagal) di terang dan gelap, tanpa error konsol.
+      Lihat `npm run preview`.
 - [ ] Filter yang dibuat lewat MCP muncul di dashboard dan bisa dipilih di
       pengaturan booth — bukan cuma ada di database.
-- [ ] Swatch mencerminkan `adjustments`; filter dengan sharpening menampilkan
-      catatan pratinjau.
+- [ ] Booth hasil duplikat bisa dibuka di editor dan dinyalakan.
+- [ ] Layar consent menampilkan baris "Create photo filters…" saat
+      `booths:write` diminta, dan tidak menampilkannya kalau tidak.
 - [ ] Claude Desktop: kartu tidak dirender, teks berisi nama filter dan
       tautan dashboard.
-- [ ] Kartu terbaca di tema gelap.
-- [ ] `npm run inspect` dan `inspect:http` hijau tanpa token.
+- [ ] `npm run inspect` dan `inspect:http` hijau tanpa token. **Belum bisa
+      diuji di sini** — sandbox memblokir `dreamboothstudio.com` di level
+      proxy, jadi `search_docs` gagal 403 di kedua smoke, sama persis di commit
+      sebelum perubahan ini.

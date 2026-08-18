@@ -23,6 +23,22 @@ export interface SessionContext {
    * never connect anything. Failing loudly beats a link that cannot work.
    */
   stateless?: boolean;
+  /**
+   * True when this request arrived with its own `Authorization: Bearer` header
+   * — that is, on the OAuth path rather than the device flow.
+   *
+   * It decides whether the write tools are registered at all. The reason it is
+   * a boolean about the CREDENTIAL'S ORIGIN rather than about its scope is that
+   * the access token is a next-auth JWE: this server holds no key for it and
+   * cannot read `scope` out of it, and asking the Studio on every `tools/list`
+   * would put a round trip in front of the cheapest call a client makes.
+   *
+   * So the gate here is the coarse half of the rule — writes exist only where
+   * a revocable, scoped token could be — and the Studio enforces the scope
+   * itself, returning a 403 whose sentence names the fix. See
+   * docs/write-tools-plan.md §5.6.
+   */
+  bearerAuth?: boolean;
 }
 
 export const STDIO_SESSION: SessionContext = {

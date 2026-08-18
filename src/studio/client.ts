@@ -1,5 +1,5 @@
 import type { Config } from "../config.js";
-import { studioErrorFor, StudioError } from "./errors.js";
+import { studioErrorFor, StudioError, writeErrorFor } from "./errors.js";
 
 /**
  * The ONLY place this service talks to Dreambooth.
@@ -74,6 +74,74 @@ export class StudioClient {
     }
 
     if (!res.ok) throw studioErrorFor(res.status, path);
+
+    return (await res.json()) as T;
+  }
+
+  /**
+   * Creates something. The only method here that changes anything.
+   *
+   * Two Studio routes accept it — POST /api/filters and the ?duplicate branch
+   * of POST /api/projects — and both require an OAuth access token carrying
+   * `booths:write`. A read-scoped token, or the device-flow session token, is
+   * refused by the Studio with a 403 whose message is written to be relayed
+   * verbatim; see `studioErrorFor`.
+   *
+   * There is deliberately no `put` or `delete`. Adding one would be a two-line
+   * change here and a much larger one everywhere else: the consent screen, the
+   * directory listing and the scope's own name all say this connector creates
+   * and does not manage. Whoever needs the method should change those first.
+   */
+  async post<T>(
+    path: string,
+    body: unknown,
+    query: Record<string, string | undefined> = {}
+  ): Promise<T> {
+    const token = this.requireToken();
+    const url = new URL(this.config.apiUrl + path);
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") url.searchParams.set(key, value);
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        /**
+         * A timeout on a write is NOT the same as a timeout on a read.
+         *
+         * The request may well have succeeded — the reply is what went missing.
+         * Telling the model this is retryable would have it create the filter a
+         * second time, so the message says to check rather than to repeat, and
+         * `retryable` is false. See studioErrorFor's 504 case for the read
+         * equivalent, which says the opposite because repeating a GET is free.
+         */
+        throw new StudioError(
+          `Dreambooth did not answer in time, and a request that creates something may have gone through anyway. ` +
+            `Do not try again — ask the operator to check their dashboard first.`,
+          504,
+          false
+        );
+      }
+      throw studioErrorFor(503, path);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!res.ok) throw await writeErrorFor(res, path);
 
     return (await res.json()) as T;
   }
