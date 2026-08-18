@@ -267,7 +267,9 @@ Urutannya: widget dulu di developer mode (murah, bisa dipakai pilot), OAuth bela
 
 ## 9. Yang bukan cakupan
 
-- Tool tulis apa pun. Widget read-only, titik.
+- Tool tulis apa pun. Widget read-only, titik. — **dicabut** oleh
+  [rencana tool tulis](write-tools-plan.md), yang menetapkan syaratnya:
+  scope `booths:write`, hanya lewat OAuth, dan kartu yang cuma merender hasil.
 - Migrasi ke OAuth 2.1 (kecuali dipaksa §2.1).
 - Pengajuan direktori app publik.
 - Widget untuk `search_docs`, `get_credits`, `get_gallery_stats`, `get_project`, `get_wallet_transactions` — teks sudah cukup untuk semuanya. Tiga widget adalah keseluruhan cakupan.
