@@ -7,7 +7,7 @@ import { createServer } from "../src/mcp/server.js";
 import { SessionTokens } from "../src/auth/tokenStore.js";
 import { buildGenerateFrame } from "../src/tools/generateFrame.js";
 import { buildCheckGeneration } from "../src/tools/checkGeneration.js";
-import { AUTH_REQUIRED_TOOLS } from "../src/mcp/toolAuth.js";
+import { AUTH_REQUIRED_TOOLS, requiresAuth } from "../src/mcp/toolAuth.js";
 import { ownerKeyFor } from "../src/jobs/store.js";
 import type { Config } from "../src/config.js";
 import type { StudioClient } from "../src/studio/client.js";
@@ -27,7 +27,12 @@ const CONFIG = {
   requestTimeoutMs: 1000,
   allowedHosts: [],
   diagnostics: false,
+  // These tests are about the tools existing, so they run with the flag ON.
+  // The block at the bottom of this file covers the default, which is OFF.
+  frameGeneration: true,
 } as unknown as Config;
+
+const CONFIG_FLAG_OFF = { ...CONFIG, frameGeneration: false } as unknown as Config;
 
 const TOKEN = "operator-token";
 
@@ -48,8 +53,8 @@ const settled = () => new Promise((r) => setImmediate(r));
 
 /* ------------------------------------------------------------- the gate --- */
 
-async function toolNames(bearerAuth: boolean): Promise<string[]> {
-  const server = createServer(CONFIG, new SessionTokens(), {
+async function toolNames(bearerAuth: boolean, config: Config = CONFIG): Promise<string[]> {
+  const server = createServer(config, new SessionTokens(), {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
@@ -225,4 +230,51 @@ test("an unknown job id points at the dashboard instead of claiming failure", as
   assert.equal(answer.state, "unknown");
   assert.match(String(answer.error), /check the dashboard/i);
   assert.ok(answer.dashboardUrl);
+});
+
+/* ------------------------------------------------------------- the flag --- */
+
+/**
+ * With ENABLE_FRAME_GENERATION off, the frame tools must not exist anywhere a
+ * client can see them.
+ *
+ * This is a claim gate, not a feature toggle. Vertex answers 404 for the Imagen
+ * model this project asks for, so the pair is complete, tested and incapable of
+ * succeeding — and a listed tool that always fails reads as a broken connector
+ * to a directory reviewer and a broken account to an operator. The default has
+ * to be provably off, or "we hid it" is just an intention.
+ */
+test("the flag hides the frame tools, and only those", async () => {
+  const hidden = await toolNames(true, CONFIG_FLAG_OFF);
+
+  assert.ok(!hidden.includes("generate_frame"));
+  assert.ok(!hidden.includes("check_generation"));
+
+  // The other write tools are unaffected — this must not be a switch that
+  // quietly turns the whole write capability off.
+  assert.ok(hidden.includes("create_filter"));
+  assert.ok(hidden.includes("duplicate_project"));
+  // And the reads, obviously.
+  assert.ok(hidden.includes("list_projects"));
+  assert.ok(hidden.includes("search_docs"));
+});
+
+test("a hidden tool is not answered with a sign-in prompt", () => {
+  const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "generate_frame" } };
+
+  // A 401 is a promise that signing in will help. For a tool that is not
+  // registered it would not: the client authenticates, calls again, and is told
+  // the tool is unknown — a sign-in loop with nothing at the end of it.
+  assert.equal(requiresAuth(call, { frameGeneration: false }), false);
+  assert.equal(requiresAuth(call, { frameGeneration: true }), true);
+
+  // Omitting the option must not accidentally re-enable the prompt: the default
+  // has to match the config default, which is off.
+  assert.equal(requiresAuth(call), false);
+
+  // Unflagged tools are untouched by any of this.
+  const filter = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_filter" } };
+  assert.equal(requiresAuth(filter), true);
+  assert.equal(requiresAuth(filter, { frameGeneration: false }), true);
+  assert.ok(AUTH_REQUIRED_TOOLS.has("generate_frame"), "still listed for when the flag is on");
 });

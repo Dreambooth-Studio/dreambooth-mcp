@@ -74,7 +74,7 @@ function requestId(body: unknown): unknown {
 async function handleStateless(
   config: Config,
   req: express.Request,
-  res: express.Response
+  res: express.Response,
 ): Promise<void> {
   const token = bearerToken(req);
 
@@ -82,7 +82,10 @@ async function handleStateless(
   // credential are refused — `initialize`, `tools/list` and `search_docs` still
   // answer anonymously, which is what keeps the listing's promise that product
   // and pricing questions need no account.
-  if (!token && requiresAuth(req.body)) {
+  if (
+    !token &&
+    requiresAuth(req.body, { frameGeneration: config.frameGeneration })
+  ) {
     sendUnauthorized(res, config, req, {
       description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,
       id: requestId(req.body),
@@ -119,8 +122,61 @@ async function handleStateless(
   await transport.handleRequest(req, res, req.body);
 }
 
+/**
+ * CORS, before anything else can answer.
+ *
+ * The ChatGPT submission portal's "Scan Tools" runs in the browser, and so do
+ * several MCP clients. With no `Access-Control-Allow-Origin` the browser
+ * blocks the response before any JavaScript sees it and reports the generic
+ * "Failed to fetch" — which looks like the server is down or the URL is
+ * wrong, and is neither. The preflight was already answering 200 with an
+ * `allow` header and no CORS headers, which is the most confusing possible
+ * combination: reachable by curl, unreachable by a browser.
+ *
+ * `*` with NO `Access-Control-Allow-Credentials`, deliberately. This service
+ * authenticates only from an explicit `Authorization` header — never a cookie
+ * — so there is no ambient credential for a hostile page to ride, and `*` is
+ * therefore safe in a way it would not be for a cookie-authenticated origin.
+ * Adding credentials support later would mean echoing a specific origin and
+ * an allow-list; do not add it casually.
+ *
+ * `Mcp-Session-Id` has to be EXPOSED as well as allowed: a browser client
+ * cannot read a response header it was not told about, and that header is how
+ * a session-based client keeps its session.
+ */
+export function corsMiddleware(
+  req: { method: string },
+  res: {
+    setHeader(name: string, value: string): void;
+    status(code: number): { end(): void };
+  },
+  next: () => void,
+): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "content-type, authorization, accept, mcp-session-id, mcp-protocol-version, last-event-id",
+  );
+  res.setHeader(
+    "Access-Control-Expose-Headers",
+    "mcp-session-id, www-authenticate",
+  );
+  res.setHeader("Access-Control-Max-Age", "86400");
+  if (req.method === "OPTIONS") {
+    // 204 and nothing else. A preflight that returns a body invites a client
+    // to parse it, and Express's default OPTIONS handler answers with an
+    // `allow` header that reads like success while carrying no CORS headers.
+    res.status(204).end();
+    return;
+  }
+  next();
+}
+
 export function startHttpServer(config: Config): void {
   const app = express();
+
+  app.use(corsMiddleware);
   const sessions = new Map<string, SessionEntry>();
 
   // Registered BEFORE anything else so Railway's healthcheck can never be
@@ -195,7 +251,10 @@ export function startHttpServer(config: Config): void {
       // on the web and on a phone was the reported defect, and one path
       // answering "not connected" while the other returns a signed 401 is
       // exactly that inconsistency in a different place.
-      if (!existing.tokens.get() && requiresAuth(req.body)) {
+      if (
+        !existing.tokens.get() &&
+        requiresAuth(req.body, { frameGeneration: config.frameGeneration })
+      ) {
         sendUnauthorized(res, config, req, {
           description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,
           id: requestId(req.body),
@@ -246,10 +305,17 @@ export function startHttpServer(config: Config): void {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableDnsRebindingProtection: config.allowedHosts.length > 0,
-      allowedHosts: config.allowedHosts.length ? config.allowedHosts : undefined,
+      allowedHosts: config.allowedHosts.length
+        ? config.allowedHosts
+        : undefined,
       onsessioninitialized: (id) => {
         const now = Date.now();
-        sessions.set(id, { transport, tokens, createdAt: now, lastSeenAt: now });
+        sessions.set(id, {
+          transport,
+          tokens,
+          createdAt: now,
+          lastSeenAt: now,
+        });
         console.log(JSON.stringify({ msg: "session opened", sessionId: id }));
       },
       onsessionclosed: (id) => {
@@ -292,7 +358,7 @@ export function startHttpServer(config: Config): void {
           msg: "session evicted (idle)",
           sessionId: id,
           idleMinutes: Math.round((Date.now() - entry.lastSeenAt) / 60000),
-        })
+        }),
       );
     }
   }, SWEEP_INTERVAL_MS);
@@ -306,7 +372,7 @@ export function startHttpServer(config: Config): void {
         version: SERVER_VERSION,
         port: config.port,
         apiUrl: config.apiUrl,
-      })
+      }),
     );
   });
 

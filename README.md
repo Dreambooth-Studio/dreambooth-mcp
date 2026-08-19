@@ -5,7 +5,8 @@ operator's questions about their own booths — "how did my Bandung booth do thi
 week?" — by wrapping the Studio API the dashboard already uses.
 
 **Status: Phase 1, live at `https://mcp.dreamboothstudio.com/mcp`.** Streamable
-HTTP + stdio, eight read-only tools, three that create something, and account
+HTTP + stdio, eight read-only tools, two that create something (a third is
+flag-gated, see below), and account
 connection through the Studio's existing OAuth device flow. Listed in the official MCP Registry as
 [`com.dreamboothstudio/dreambooth`](https://registry.modelcontextprotocol.io/v0.1/servers?search=com.dreamboothstudio/dreambooth)
 v0.1.0.
@@ -194,6 +195,15 @@ That is the complete read set. Two more wrap a route that creates something:
 | `duplicate_project` | `POST /api/projects?duplicate` | Bearer + `booths:write` |
 | `generate_frame` | `POST /api/ai/frames/create` | Bearer + `booths:write` |
 | `check_generation` | nothing — reads this process | Bearer |
+
+> **`generate_frame` and `check_generation` are off by default**, behind
+> `ENABLE_FRAME_GENERATION=1`. Vertex answers `404 NOT_FOUND` for the Imagen
+> model this project asks for, so the pair is complete and tested and cannot
+> currently succeed. A listed tool that always fails reads as a broken
+> connector to a reviewer and a broken account to an operator, so it is absent
+> instead. Turn the flag on in the same change that makes a real generation
+> work, and restore the frame lines in `docs/chatgpt-listing.md` at the same
+> time.
 
 `generate_frame` is the only pair here. Frame generation is an image-model
 call and the Studio route declares `maxDuration = 120`, against a 15-second
