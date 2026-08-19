@@ -49,6 +49,109 @@ async function fetchWithRetry(url, init, attempts = 4) {
   throw lastErr;
 }
 
+// ---- 0. discovery, before anyone opens a browser ---------------------------
+//
+// Runs first because it is free and because everything after it costs a human
+// a browser approval — but mainly because this is the failure that hides.
+//
+// A client does not guess which scopes it may ask for; it reads them from
+// these documents before it has a token. The write tools once shipped while
+// every one of them still said `booths:read` alone, which meant no client
+// would ever request `booths:write`, no operator would be offered it on the
+// consent screen, and every write would come back 403 telling them to approve
+// a permission nothing had asked for. Every unit test passed. Only a live
+// deployment can answer this, which is why it is here and not in `npm test`.
+
+const WANT_SCOPES = ["booths:read", "booths:write"];
+
+async function checkDiscovery() {
+  let bad = 0;
+  const ok = (good, label, detail = "") => {
+    if (!good) bad++;
+    console.log(`${good ? "OK  " : "FAIL"}  ${label}${detail ? "  " + detail : ""}`);
+  };
+
+  console.log("Discovery documents:");
+  console.log("");
+
+  // Both spellings. RFC 9728 §3.1 puts the resource path in the well-known
+  // URL and clients build that themselves, so a client may only ever see one
+  // of these — whichever it finds is where it reads the scopes from.
+  for (const path of [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
+  ]) {
+    try {
+      const res = await fetchWithRetry(`${BASE}${path}`);
+      const doc = await res.json();
+      const scopes = doc.scopes_supported ?? [];
+      ok(
+        WANT_SCOPES.every((sc) => scopes.includes(sc)),
+        `${path} advertises both scopes`,
+        JSON.stringify(scopes)
+      );
+      ok(Array.isArray(doc.authorization_servers) && doc.authorization_servers.length > 0,
+        `${path} names an authorization server`);
+    } catch (err) {
+      ok(false, `${path} readable`, String(err?.message ?? err));
+    }
+  }
+
+  try {
+    const res = await fetchWithRetry(`${STUDIO}/.well-known/oauth-authorization-server`);
+    const doc = await res.json();
+    const scopes = doc.scopes_supported ?? [];
+    // The Studio is the authority: it can only GRANT what is listed here, so a
+    // scope advertised by the resource but missing here is unobtainable.
+    ok(
+      WANT_SCOPES.every((sc) => scopes.includes(sc)),
+      "authorization server advertises both scopes",
+      JSON.stringify(scopes)
+    );
+  } catch (err) {
+    ok(false, "authorization server metadata readable", String(err?.message ?? err));
+  }
+
+  // The 401 is the other place a client learns what it may ask for, and for
+  // some clients the only one — not every client fetches the document above
+  // before building its authorization request.
+  try {
+    const res = await fetchWithRetry(`${BASE}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "get_credits", arguments: {} },
+      }),
+    });
+    const challenge = res.headers.get("www-authenticate") ?? "";
+    ok(res.status === 401, "an unauthenticated tool call is refused", `http ${res.status}`);
+    ok(/resource_metadata=/.test(challenge), "the challenge names where the metadata lives");
+    ok(
+      WANT_SCOPES.every((sc) => challenge.includes(sc)),
+      "the challenge names the scopes a client may request",
+      challenge.match(/scope="[^"]*"/)?.[0] ?? "no scope parameter"
+    );
+  } catch (err) {
+    ok(false, "401 challenge reachable", String(err?.message ?? err));
+  }
+
+  return bad;
+}
+
+const discoveryFailures = await checkDiscovery();
+if (discoveryFailures) {
+  console.log("");
+  console.log(discoveryFailures + " discovery check(s) failed. Stopping here rather than");
+  console.log("asking anyone to approve a browser flow: a client that cannot discover");
+  console.log("the right scopes will connect and then fail on its first write, which");
+  console.log("is a much harder failure to read than this one.");
+  process.exit(1);
+}
+console.log("");
+
 // ---- 1. obtain a token the same way the server does -------------------------
 
 const authorize = await fetchWithRetry(`${STUDIO}/api/auth/desktop/google/authorize`, {

@@ -1,8 +1,35 @@
 # Half 2 — OAuth 2.1, and the end of session-held tokens
 
-Status: **design**. Half 1 (stateless transport) shipped in dreambooth-mcp#8.
-Audited against the MCP SDK in `node_modules` and the Studio at `main`,
-2026-08-11.
+Status: **shipped.** Written as a design on 2026-08-11 and merged unmodified in
+2026-08-18 as part of the write-tools branch, so the reasoning survives next to
+the code it produced rather than being rewritten to match the outcome.
+
+What is live: the Studio runs the full OAuth 2.1 authorization server described
+below (`app/api/oauth/*`, PKCE S256, 1-hour access tokens, 30-day refresh,
+dynamic registration, RFC 8707 audience, RFC 7009 revocation), and this server
+is a protected resource in front of it (#12). Both discovery documents answer
+in production.
+
+Two things below have moved since:
+
+- **"Token design — this is the Phase 3 debt"** is paid, but only on the OAuth
+  path. The device flow keeps every property this section complains about —
+  one year, unscoped, unrevocable — which is now the stated reason the write
+  tools are registered only when a request carries its own bearer.
+- **Scopes.** This document assumes `booths:read` is the whole vocabulary.
+  `booths:write` arrived later; see [`write-tools-plan.md`](write-tools-plan.md)
+  for what it covers and §5.6 there for the part of that plan the code
+  disproved.
+
+One thing this document did not anticipate, and it nearly shipped broken:
+advertising a scope is a separate act from supporting one. Three documents
+publish the vocabulary a client reads before it has a token, and two of them
+were hardcoded. See the discovery pre-flight in
+`.claude/skills/mcp-verify/scripts/bearer-check.mjs`, which exists because only
+a live deployment can catch it.
+
+Half 1 (stateless transport) shipped in dreambooth-mcp#8. Audited against the
+MCP SDK in `node_modules` and the Studio at `main`, 2026-08-11.
 
 ## Why this is not optional
 
