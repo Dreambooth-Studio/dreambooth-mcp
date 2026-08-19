@@ -23,8 +23,17 @@ const call = (name: string) => ({
 });
 
 test("requiresAuth: true for every tool that talks to the Studio", () => {
+  // With frameGeneration on, every entry in the set requires auth. The flag is
+  // passed explicitly because the DEFAULT is off, and a flagged tool that is not
+  // registered must not be answered with a sign-in prompt — see
+  // "a hidden tool is not answered with a sign-in prompt" in
+  // generationTools.test.ts for why that distinction matters.
   for (const name of AUTH_REQUIRED_TOOLS) {
-    assert.equal(requiresAuth(call(name)), true, `${name} should require auth`);
+    assert.equal(
+      requiresAuth(call(name), { frameGeneration: true }),
+      true,
+      `${name} should require auth`
+    );
   }
 });
 

@@ -64,8 +64,24 @@ export function toolCallName(body: unknown): string | null {
   return typeof name === "string" ? name : null;
 }
 
+/**
+ * Tools that only exist when `ENABLE_FRAME_GENERATION` is on.
+ *
+ * Named here as well as in `createServer` because refusing a call with a 401
+ * is a promise that signing in will help. For a tool that is not registered at
+ * all it would not: the client would authenticate, call again, and be told the
+ * tool is unknown — a sign-in loop with nothing at the end of it. Better to
+ * let it fall through to the honest "unknown tool".
+ */
+export const FLAGGED_TOOLS = new Set(["generate_frame", "check_generation"]);
+
 /** True when this request is a call to a tool that cannot work without a token. */
-export function requiresAuth(body: unknown): boolean {
+export function requiresAuth(
+  body: unknown,
+  options: { frameGeneration?: boolean } = {}
+): boolean {
   const name = toolCallName(body);
-  return name !== null && AUTH_REQUIRED_TOOLS.has(name);
+  if (name === null) return false;
+  if (!options.frameGeneration && FLAGGED_TOOLS.has(name)) return false;
+  return AUTH_REQUIRED_TOOLS.has(name);
 }

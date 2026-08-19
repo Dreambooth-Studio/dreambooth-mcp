@@ -19,8 +19,14 @@ import { buildDuplicateProject } from "../tools/duplicateProject.js";
 import { buildGenerateFrame } from "../tools/generateFrame.js";
 import { buildCheckGeneration } from "../tools/checkGeneration.js";
 import { registerWidget, withWidget, widgetAccessible } from "./widgets.js";
-import { CONNECT_WIDGET_URI, connectAccountWidgetHtml } from "../ui/connectAccount.js";
-import { WRITE_RESULT_WIDGET_URI, writeResultWidgetHtml } from "../ui/writeResult.js";
+import {
+  CONNECT_WIDGET_URI,
+  connectAccountWidgetHtml,
+} from "../ui/connectAccount.js";
+import {
+  WRITE_RESULT_WIDGET_URI,
+  writeResultWidgetHtml,
+} from "../ui/writeResult.js";
 import { STDIO_SESSION, type SessionContext } from "./session.js";
 
 export const SERVER_NAME = "dreambooth";
@@ -49,7 +55,9 @@ function safe<A>(handler: (args: A) => Promise<unknown>) {
       const result = await handler(args);
       return {
         structuredContent: result as Record<string, unknown>,
-        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        content: [
+          { type: "text" as const, text: JSON.stringify(result, null, 2) },
+        ],
       };
     } catch (err) {
       const message =
@@ -132,13 +140,13 @@ const CREATES = {
 export function createServer(
   config: Config,
   tokens: SessionTokens,
-  session: SessionContext = STDIO_SESSION
+  session: SessionContext = STDIO_SESSION,
 ): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
   const studio = new StudioClient(
     config,
     () => tokens.get(),
-    () => tokens.describe()
+    () => tokens.describe(),
   );
 
   // The card `connect_account` renders into. Registered before the tool that
@@ -158,11 +166,15 @@ export function createServer(
   const connect = buildConnectAccount(config, tokens, session);
   server.registerTool(
     connect.name,
-    withWidget({ ...connect.config, annotations: GRANTS_ACCESS }, CONNECT_WIDGET_URI, {
-      invoking: "Menyiapkan tautan masuk…",
-      invoked: "Tautan masuk siap",
-    }),
-    safe(connect.handler)
+    withWidget(
+      { ...connect.config, annotations: GRANTS_ACCESS },
+      CONNECT_WIDGET_URI,
+      {
+        invoking: "Menyiapkan tautan masuk…",
+        invoked: "Tautan masuk siap",
+      },
+    ),
+    safe(connect.handler),
   );
 
   // Polled by the card above, so it must be callable from inside the iframe and
@@ -172,7 +184,7 @@ export function createServer(
   server.registerTool(
     status.name,
     widgetAccessible({ ...status.config, annotations: READ_ONLY }),
-    safe(status.handler)
+    safe(status.handler),
   );
 
   // TEMPORARY, and OFF unless MCP_DIAGNOSTICS is set — remove with the tool
@@ -192,7 +204,7 @@ export function createServer(
     server.registerTool(
       info.name,
       widgetAccessible({ ...info.config, annotations: READ_ONLY }),
-      safe(info.handler)
+      safe(info.handler),
     );
   }
 
@@ -207,56 +219,56 @@ export function createServer(
   server.registerTool(
     sessions.name,
     { ...sessions.config, annotations: READ_ONLY },
-    safe(sessions.handler)
+    safe(sessions.handler),
   );
 
   const gallery = buildGetGalleryStats(studio);
   server.registerTool(
     gallery.name,
     { ...gallery.config, annotations: READ_ONLY },
-    safe(gallery.handler)
+    safe(gallery.handler),
   );
 
   const docs = buildSearchDocs(studio);
   server.registerTool(
     docs.name,
     { ...docs.config, annotations: READ_ONLY },
-    safe(docs.handler)
+    safe(docs.handler),
   );
 
   const projects = buildListProjects(studio);
   server.registerTool(
     projects.name,
     { ...projects.config, annotations: READ_ONLY },
-    safe(projects.handler)
+    safe(projects.handler),
   );
 
   const project = buildGetProject(studio);
   server.registerTool(
     project.name,
     { ...project.config, annotations: READ_ONLY },
-    safe(project.handler)
+    safe(project.handler),
   );
 
   const revenue = buildGetRevenueSummary(studio);
   server.registerTool(
     revenue.name,
     { ...revenue.config, annotations: READ_ONLY },
-    safe(revenue.handler)
+    safe(revenue.handler),
   );
 
   const credits = buildGetCredits(studio);
   server.registerTool(
     credits.name,
     { ...credits.config, annotations: READ_ONLY },
-    safe(credits.handler)
+    safe(credits.handler),
   );
 
   const wallet = buildGetWalletTransactions(studio);
   server.registerTool(
     wallet.name,
     { ...wallet.config, annotations: READ_ONLY },
-    safe(wallet.handler)
+    safe(wallet.handler),
   );
 
   /**
@@ -289,21 +301,29 @@ export function createServer(
     const createFilter = buildCreateFilter(studio, config);
     server.registerTool(
       createFilter.name,
-      withWidget({ ...createFilter.config, annotations: CREATES }, WRITE_RESULT_WIDGET_URI, {
-        invoking: "Membuat filter…",
-        invoked: "Filter dibuat",
-      }),
-      safe(createFilter.handler)
+      withWidget(
+        { ...createFilter.config, annotations: CREATES },
+        WRITE_RESULT_WIDGET_URI,
+        {
+          invoking: "Membuat filter…",
+          invoked: "Filter dibuat",
+        },
+      ),
+      safe(createFilter.handler),
     );
 
     const duplicateProject = buildDuplicateProject(studio, config);
     server.registerTool(
       duplicateProject.name,
-      withWidget({ ...duplicateProject.config, annotations: CREATES }, WRITE_RESULT_WIDGET_URI, {
-        invoking: "Menduplikat booth…",
-        invoked: "Booth diduplikat",
-      }),
-      safe(duplicateProject.handler)
+      withWidget(
+        { ...duplicateProject.config, annotations: CREATES },
+        WRITE_RESULT_WIDGET_URI,
+        {
+          invoking: "Menduplikat booth…",
+          invoked: "Booth diduplikat",
+        },
+      ),
+      safe(duplicateProject.handler),
     );
 
     /**
@@ -314,27 +334,36 @@ export function createServer(
      * No widget on `generate_frame`: at the moment it returns, nothing has
      * been created, and a card is a claim that something has. The result card
      * belongs on the tool that can actually show a frame.
+     *
+     * Behind `ENABLE_FRAME_GENERATION`, and off by default. Vertex answers
+     * `404 NOT_FOUND` for the Imagen model this project asks for, so these two
+     * are complete, tested, and currently incapable of succeeding. Listing a
+     * tool that always fails is worse than not listing it: a reviewer reads it
+     * as a broken connector and an operator reads it as a broken account.
+     * See `Config.frameGeneration`.
      */
-    const generateFrame = buildGenerateFrame(studio, config);
-    server.registerTool(
-      generateFrame.name,
-      { ...generateFrame.config, annotations: CREATES },
-      safe(generateFrame.handler)
-    );
+    if (config.frameGeneration) {
+      const generateFrame = buildGenerateFrame(studio, config);
+      server.registerTool(
+        generateFrame.name,
+        { ...generateFrame.config, annotations: CREATES },
+        safe(generateFrame.handler),
+      );
 
-    const checkGeneration = buildCheckGeneration(studio, config);
-    server.registerTool(
-      checkGeneration.name,
-      withWidget(
-        // Reads a status and creates nothing. Saying so is what lets a client
-        // poll without asking the operator each time, which is the only way
-        // polling is tolerable.
-        { ...checkGeneration.config, annotations: READ_ONLY },
-        WRITE_RESULT_WIDGET_URI,
-        { invoking: "Mengecek…", invoked: "Status generasi" }
-      ),
-      safe(checkGeneration.handler)
-    );
+      const checkGeneration = buildCheckGeneration(studio, config);
+      server.registerTool(
+        checkGeneration.name,
+        withWidget(
+          // Reads a status and creates nothing. Saying so is what lets a client
+          // poll without asking the operator each time, which is the only way
+          // polling is tolerable.
+          { ...checkGeneration.config, annotations: READ_ONLY },
+          WRITE_RESULT_WIDGET_URI,
+          { invoking: "Mengecek…", invoked: "Status generasi" },
+        ),
+        safe(checkGeneration.handler),
+      );
+    }
   }
 
   return server;
