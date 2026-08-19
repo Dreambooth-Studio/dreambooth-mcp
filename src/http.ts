@@ -76,6 +76,43 @@ async function handleStateless(
   req: express.Request,
   res: express.Response,
 ): Promise<void> {
+  /**
+   * There is no server-to-client stream on this path, so say so.
+   *
+   * A stateless request gets a throwaway server that is closed on the response.
+   * It can never push anything, so an SSE stream opened here would sit open
+   * forever delivering nothing — which is exactly what it did: `GET /mcp`
+   * answered 200, wrote a few bytes, and held the connection until the client
+   * gave up. A client that opens the stream and waits for it hangs, and a
+   * backend driving that client times out and reports a failure with no cause
+   * attached to it.
+   *
+   * The spec asks for this explicitly. Streamable HTTP says a server that does
+   * not offer an SSE stream at the endpoint MUST answer GET with 405, and the
+   * point of 405 is that it is instant and unambiguous: the client learns there
+   * is no stream and carries on with POST, instead of waiting for one that will
+   * never speak.
+   *
+   * DELETE gets the same treatment. It ends a session, and a stateless request
+   * has none to end.
+   */
+  if (req.method === "GET" || req.method === "DELETE") {
+    res
+      .status(405)
+      .set("Allow", "POST, OPTIONS")
+      .json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message:
+            "This endpoint does not offer a server-to-client stream. Send requests as POST; " +
+            "every reply arrives in the POST response.",
+        },
+        id: null,
+      });
+    return;
+  }
+
   const token = bearerToken(req);
 
   // The 401 that starts the OAuth flow. Only tool calls that genuinely need a
@@ -145,7 +182,10 @@ async function handleStateless(
  * a session-based client keeps its session.
  */
 export function corsMiddleware(
-  req: { method: string; headers: Record<string, string | string[] | undefined> },
+  req: {
+    method: string;
+    headers: Record<string, string | string[] | undefined>;
+  },
   res: {
     setHeader(name: string, value: string): void;
     status(code: number): { end(): void };
