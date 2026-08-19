@@ -362,6 +362,31 @@ export function startHttpServer(config: Config): void {
 
   app.use(express.json({ limit: "4mb" }));
 
+  /**
+   * A body this parser rejects must come back as JSON-RPC, not as HTML.
+   *
+   * Express's default handler answers a malformed body with an HTML error page.
+   * Every client of this endpoint is a JSON-RPC client: it sends
+   * `Accept: application/json`, gets `<!DOCTYPE html>`, and fails inside its own
+   * parser — where the error it reports is about our response being unreadable
+   * rather than about the request it sent. That is a bad trade for a caller who
+   * is one character away from a valid body.
+   *
+   * -32700 is the JSON-RPC code for exactly this, so a client can say what
+   * happened without guessing.
+   */
+  app.use(((err, _req, res, next) => {
+    if (err?.type === "entity.parse.failed" || err instanceof SyntaxError) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32700, message: "Parse error: the request body is not valid JSON." },
+        id: null,
+      });
+      return;
+    }
+    next(err);
+  }) as express.ErrorRequestHandler);
+
   const handle: express.RequestHandler = async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const existing = sessionId ? sessions.get(sessionId) : undefined;

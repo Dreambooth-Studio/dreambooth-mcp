@@ -51,8 +51,7 @@ const AUTH_SERVER_ALIAS_PATHS = [
 ];
 
 function resourceUrl(config: Config, req: express.Request): string {
-  const host = config.allowedHosts[0] ?? req.headers.host ?? "mcp.dreamboothstudio.com";
-  return `https://${host}/mcp`;
+  return `https://${config.publicHost}/mcp`;
 }
 
 export function registerWellKnown(app: express.Express, config: Config): void {

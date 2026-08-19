@@ -21,7 +21,7 @@ import { SCOPE_STRING } from "./scopes.js";
  * hardware they need, which is what the directory listing promises.
  */
 export function resourceMetadataUrl(config: Config, req: express.Request): string {
-  const host = config.allowedHosts[0] ?? req.headers.host ?? "mcp.dreamboothstudio.com";
+  const host = config.publicHost;
   // The path-suffixed form, RFC 9728 §3.1: the resource lives at /mcp, so its
   // metadata lives at /.well-known/oauth-protected-resource/mcp. Clients derive
   // this URL themselves and compare, so pointing at the bare path here while

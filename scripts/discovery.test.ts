@@ -24,6 +24,12 @@ import type { Config } from "../src/config.js";
 
 const CONFIG = {
   apiUrl: "https://studio.example",
+  // Set separately from allowedHosts on purpose. Identity is what this server
+  // claims to be and must match the URL submitted to a directory; allowedHosts
+  // is an operational allow-list that may gain entries. This test used to rely
+  // on the first deriving from the second, which is the coupling that was
+  // removed — adding a host must not silently change the server's identity.
+  publicHost: "mcp.example",
   allowedHosts: ["mcp.example"],
 } as unknown as Config;
 
