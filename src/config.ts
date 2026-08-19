@@ -19,6 +19,22 @@ export interface Config {
    */
   allowedHosts: string[];
   /**
+   * The hostname this server publishes as its own identity.
+   *
+   * Deliberately separate from {@link allowedHosts}. That is an operational
+   * allow-list which may gain entries — a Railway subdomain, a staging host —
+   * and this is an identity that must match the URL submitted to a directory
+   * exactly. Deriving the second from the first means adding a host silently
+   * changes what this server claims to be, and the previous code took
+   * `allowedHosts[0]`, so the claim depended on array order.
+   *
+   * It also removes `req.headers.host` from the fallback path. That value is
+   * set by the caller, and it was reaching the `resource_metadata` URL in a 401
+   * challenge — telling a client where to look for our metadata based on what
+   * the client itself asked for.
+   */
+  publicHost: string;
+  /**
    * Registers `session_info`, the connection diagnostic. Off by default: a
    * public directory listing is judged on its tool list, and this one answers
    * nothing an operator asked. Turn it on only to run the session-reuse test.
@@ -78,6 +94,7 @@ export function loadConfig(): Config {
     // service's port guard; anything non-integer is a config error, not a
     // reason to silently bind somewhere unexpected.
     port: resolvePort(),
+    publicHost: (process.env.PUBLIC_HOST || "mcp.dreamboothstudio.com").trim(),
     allowedHosts: (process.env.ALLOWED_HOSTS || "")
       .split(",")
       .map((h) => h.trim())

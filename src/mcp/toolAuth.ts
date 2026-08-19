@@ -53,6 +53,15 @@ interface JsonRpcLike {
  * function decides whether to REFUSE a request, so every ambiguous case must
  * resolve to "carry on" — guessing wrong in the other direction 401s a
  * perfectly good `initialize` and the connector never starts at all.
+ *
+ * The batch case is the one with a real cost, so it is worth naming: the SDK
+ * does still answer JSON-RPC arrays, so an authenticated `tools/call` wrapped
+ * in a batch reaches the tool without a 401 and comes back as the "no account
+ * is connected" sentence instead of starting a sign-in. That is a worse
+ * experience than the challenge, and it is still the right trade — inspecting
+ * a batch to decide whether ANY member needs auth means refusing a whole batch
+ * for one member, and 401ing an array that also carries `initialize` breaks the
+ * connection outright. Clients that matter do not batch tool calls.
  */
 export function toolCallName(body: unknown): string | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;

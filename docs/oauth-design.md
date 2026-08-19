@@ -102,6 +102,25 @@ identity system.
 
 ## Studio work
 
+> **SUDAH DIBANGUN DAN LIVE — jangan dibaca sebagai daftar pekerjaan.**
+>
+> Bagian ini menggambarkan rencana sebelum kodenya ada. Seluruhnya sudah
+> dikerjakan dan berjalan di produksi:
+> `https://dreamboothstudio.com/.well-known/oauth-authorization-server`
+> menjawab **200** dengan `Access-Control-Allow-Origin: *`, dan
+> `/api/oauth/{authorize,token,register,revoke}` semuanya hidup.
+>
+> Verifikasi sendiri sebelum menyimpulkan apa pun dari daftar di bawah:
+>
+> ```
+> curl -s -D- https://dreamboothstudio.com/.well-known/oauth-authorization-server
+> ```
+>
+> Status "belum dibangun" di bawah sudah dua kali menyebabkan diagnosis yang
+> salah pada investigasi tool-scan, oleh pembaca yang tidak bisa menjangkau host
+> live. Itu sebabnya peringatan ini ada di sini dan bukan hanya di header
+> dokumen.
+
 1. `GET /.well-known/oauth-authorization-server` — discovery.
 2. `GET /api/oauth/authorize` — validate `client_id`, `redirect_uri`,
    `code_challenge` (S256 required by OAuth 2.1), `state`. Reuse the desktop
