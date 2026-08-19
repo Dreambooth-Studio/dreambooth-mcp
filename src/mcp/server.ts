@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ListPromptsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Config } from "../config.js";
 import { StudioClient } from "../studio/client.js";
 import type { SessionTokens } from "../auth/tokenStore.js";
@@ -143,6 +144,27 @@ export function createServer(
   session: SessionContext = STDIO_SESSION,
 ): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+
+  /**
+   * Answer `prompts/list` with an empty list instead of "Method not found".
+   *
+   * This server has no prompts, and declining the method with a JSON-RPC
+   * -32601 is spec-correct: the capability is not advertised, so a client that
+   * checks capabilities before calling never asks. Some do not check. A client
+   * that calls it unconditionally and does not handle the error gets an
+   * exception where it expected an array, and there is nothing in our response
+   * to tell whoever is debugging it that the call was optional.
+   *
+   * An empty list is true, costs one round trip, and cannot be misread. It adds
+   * nothing to the tool surface a directory reviewer sees — `prompts/list` is
+   * not the tool list — so the usual argument against widening the surface does
+   * not apply here.
+   *
+   * Registered as a capability as well as a handler: advertising `prompts` and
+   * then erroring would be worse than either alone.
+   */
+  server.server.registerCapabilities({ prompts: {} });
+  server.server.setRequestHandler(ListPromptsRequestSchema, () => ({ prompts: [] }));
   const studio = new StudioClient(
     config,
     () => tokens.get(),

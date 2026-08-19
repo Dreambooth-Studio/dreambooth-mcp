@@ -83,3 +83,42 @@ test("toolCallName: reports the name for a tool call and null otherwise", () => 
   assert.equal(toolCallName(call("get_credits")), "get_credits");
   assert.equal(toolCallName({ method: "initialize" }), null);
 });
+
+/* ------------------------------------------------------- optional methods --- */
+
+/**
+ * `prompts/list` answers with an empty list, not an error.
+ *
+ * This server has no prompts, and declining with -32601 is spec-correct — the
+ * capability would not be advertised, so a client that checks before calling
+ * never asks. Some clients do not check, and one that calls unconditionally
+ * without handling the error gets an exception where it expected an array.
+ *
+ * An empty list is true and cannot be misread. Asserted here because the
+ * failure it prevents happens in somebody else's process, where we would never
+ * see it.
+ */
+test("prompts/list returns an empty list and the capability is declared", async () => {
+  const { createServer } = await import("../src/mcp/server.js");
+  const { SessionTokens } = await import("../src/auth/tokenStore.js");
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+
+  const server = createServer(
+    { apiUrl: "https://studio.example", allowedHosts: [] } as never,
+    new SessionTokens(),
+    { transport: "http", sessionId: () => undefined, stateless: true },
+  );
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "0" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+
+  // Advertising `prompts` and then erroring would be worse than either alone.
+  assert.ok(client.getServerCapabilities()?.prompts, "prompts capability is advertised");
+
+  const listed = await client.listPrompts();
+  assert.deepEqual(listed.prompts, []);
+
+  await client.close();
+  await server.close();
+});
