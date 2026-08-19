@@ -46,8 +46,6 @@ const SCRIPT = `
       open: "Buka di dashboard",
       failed: "Tidak jadi dibuat",
       copiedFrom: "Disalin dari",
-      inactive: "belum aktif",
-      active: "aktif",
       publicFilter: "bisa dipakai booth mana pun",
       partial: "Pratinjau tidak memuat penajaman, reduksi noise, vignette dan grain.",
       noPreview: "Filter ini memakai efek yang tidak bisa dipratinjau di sini."
@@ -62,8 +60,6 @@ const SCRIPT = `
       open: "Open in dashboard",
       failed: "Nothing was created",
       copiedFrom: "Copied from",
-      inactive: "not live yet",
-      active: "live",
       publicFilter: "available to any booth",
       partial: "The preview leaves out sharpening, noise reduction, vignette and grain.",
       noPreview: "This filter uses effects that cannot be previewed here."
@@ -78,8 +74,6 @@ const SCRIPT = `
       open: "Abrir en el panel",
       failed: "No se creo nada",
       copiedFrom: "Copiado de",
-      inactive: "aun no activa",
-      active: "activa",
       publicFilter: "disponible para cualquier cabina",
       partial: "La vista previa omite nitidez, reduccion de ruido, vineta y grano.",
       noPreview: "Este filtro usa efectos que no se pueden previsualizar aqui."
@@ -241,11 +235,25 @@ const SCRIPT = `
   }
 
   function renderBooth(out) {
+    /*
+     * No active/inactive line, deliberately.
+     *
+     * The card used to end with one, driven by isActive. That field is a
+     * soft-delete flag defaulting to true, not a live/paused switch, so the
+     * label claimed a distinction the product does not have: a duplicate
+     * always renders whichever word it maps to, regardless of anything the
+     * operator can see or change. "belum aktif" was wrong, and "aktif" would
+     * be true and meaningless.
+     *
+     * What is worth saying is that it is a copy, and of what. Both are below.
+     *
+     * No backticks in this comment. It lives inside the template literal that
+     * is this whole SCRIPT string, and one backtick ends the string.
+     */
     var facts = [];
     if (out.copiedFrom && out.copiedFrom.title) {
       facts.push(t.copiedFrom + " " + out.copiedFrom.title);
     }
-    facts.push(out.isActive ? t.active : t.inactive);
 
     el.innerHTML =
       '<div class="db-status db-status--ok">' + CHECK + '<span>' + esc(t.boothMade) + '</span></div>' +

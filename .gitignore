@@ -29,3 +29,8 @@ dist-skills/
 
 # Skill archives built for upload, including ones zipped by hand.
 chatgpt-skills/*.zip
+
+# Submission screenshots, rendered from .preview by headless Chrome. Build
+# output like .preview itself — regenerate with npm run preview and the
+# render step rather than committing PNGs.
+.screenshots/

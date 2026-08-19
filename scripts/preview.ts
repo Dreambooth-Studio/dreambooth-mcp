@@ -120,7 +120,6 @@ const SCENARIOS: Scenario[] = [
       id: "66f1c0ffee0000000000f00d",
       title: "Bandung Expo-copy",
       slug: "bandung-expo-copy",
-      isActive: false,
       copiedFrom: { id: "66f1c0ffee0000000000abcd", title: "Bandung Expo" },
       dashboardUrl:
         "https://dreamboothstudio.com/dashboard/projects/66f1c0ffee0000000000f00d/editor",
