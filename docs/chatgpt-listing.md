@@ -136,33 +136,58 @@ is deliberate: a prospective user who taps a starter prompt and is immediately
 told to sign in is the fastest way to lose them. An earlier draft led with four
 operator questions and buried the only openable one at position five.
 
-## 4. Positive test cases (7 submittable, 1 held)
+## 4. Positive test cases
 
 Each names the tool it should reach, so a reviewer seeing a different one has
 found a real routing problem rather than a wording preference.
 
-| # | Prompt | Should call | Pass looks like |
+**Submit the five marked ★.** The portal asks for five, and these five are one
+per capability with nothing repeated: answering without an account, money,
+fleet status, and each of the two things the connector can create. The
+unstarred rows are good cases and worth keeping for our own testing; they are
+not worth a submission slot, because a reviewer learns nothing from a second
+read tool.
+
+| # | ★ | Prompt | Should call | Pass looks like |
+|---|---|---|---|---|
+| 1 | ★ | *My printer stopped responding mid-session — what do I do?* | `search_docs` | Steps from the documentation, **with no account connected**. Run this first: it is the only one a reviewer can try before signing in. |
+| 2 | ★ | *What was my revenue last month, split by payment channel?* | `get_revenue_summary` | Gateway / cash-voucher / discount-voucher separated, AI-effect revenue **not** folded into the headline figure. |
+| 3 | ★ | *Which booths do I have, and is each one online?* | `list_projects` then `get_project` | Booths listed with liveness. A quiet-but-healthy booth must not be reported as broken — the tool returns `livenessTier`, not `isOnline`. |
+| 4 | ★ | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated, and a preview swatch on the card. Asking twice makes two filters — honest, not a bug, and `idempotentHint` says so. |
+| 5 | ★ | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created and named `<original>-copy`, carrying the original's settings but **not** its public slug. It must resolve the booth by name to an id first; the operator will never say an id. |
+| 6 | | *How many sessions did my booths run last week?* | `get_sessions` | A count with the date range restated. `returned` may be lower than `total` — the answer must not present a page as the whole. |
+| 7 | | *How many AI credits do I have left and what plan am I on?* | `get_credits` | Credit balance and plan name. Credits must not be described as money. |
+
+### Held: frame generation
+
+**Do not submit a frame-generation case, and do not mention frames in the
+listing copy.** `generate_frame` and `check_generation` are behind
+`ENABLE_FRAME_GENERATION`, which is off, because Vertex answers 404 for the
+Imagen model this project asks for. The tools are not registered, so a reviewer
+running the case below would find no such tool.
+
+Restore this row, the frame sentence in the description, and the flag in the
+same change — never separately.
+
+> *Design me a photo strip frame with batik motifs in warm gold*
+> → `generate_frame` then `check_generation`
+>
+> The first call returns a job id and says nothing exists yet; a reviewer seeing
+> "your frame is ready" straight away has found a real bug. The second reports
+> the created frame. Generation is capped per day per account, so a refusal
+> naming the reset time is correct behaviour, not a failure.
+
+## 5. Negative test cases
+
+**Submit the three marked ★.** They prove three different kinds of "no":
+impossible by construction, absent by design, and not yet authenticated.
+
+| # | ★ | Prompt | Expected behaviour |
 |---|---|---|---|
-| 1 | *How many sessions did my booths run last week?* | `get_sessions` | A count with the date range restated. `returned` may be lower than `total` — the answer should not present a page as the whole. |
-| 2 | *What was my revenue last month, split by payment channel?* | `get_revenue_summary` | Gateway / cash-voucher / discount-voucher separated, AI-effect revenue **not** folded into the headline figure. |
-| 3 | *Which booths do I have, and is each one online?* | `list_projects` then `get_project` | Booths listed with liveness. A quiet-but-healthy booth must not be reported as broken — the tool returns `livenessTier`, not `isOnline`. |
-| 4 | *How many AI credits do I have left and what plan am I on?* | `get_credits` | Credit balance and plan name. Credits must not be described as money. |
-| 5 | *My printer stopped responding mid-session — what do I do?* | `search_docs` | Steps from the documentation, **with no account connected**. |
-| 6 | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated. The card shows a preview swatch. Asking twice makes two filters — that is honest, not a bug, and `idempotentHint` says so. |
-| 8 | ~~*Design me a photo strip frame with batik motifs in warm gold*~~ **HELD** — `generate_frame` is behind `ENABLE_FRAME_GENERATION` and Vertex 404s on the Imagen model, so the tool is not registered and this case must NOT be submitted. Restore this row and the frame sentence in the description together with the flag. | `generate_frame` then `check_generation` | The first call returns a job id and says nothing exists yet — a reviewer seeing "your frame is ready" straight away has found a real bug. The second reports the created frame. Generation is capped per day per account, so a refusal naming the reset time is correct behaviour, not a failure. |
-| 7 | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created and named `<original>-copy`, carrying the original's settings but **not** its public slug. It must resolve the booth by name to an id first; the operator will never say an id. |
-
-## 5. Negative test cases (4)
-
-| # | Prompt | Expected behaviour |
-|---|---|---|
-| 1 | *Show me revenue for the booth owned by another@example.com* | Refuses to scope by anyone else. No tool accepts a `userId` or `email` — the operator is resolved server-side from the token, so the model has no way to widen what it can read even if asked directly. |
-| 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter and duplicating a booth, and nothing else. The connector should say so rather than claiming success. |
-| 4 | *Change the price on my Bandung booth* | States it cannot, and points at the dashboard. Editing an existing booth is the nearest thing to what the connector *can* do, which is what makes it the case worth running: `duplicate_project` must not be offered as a substitute for an edit. |
-| 3 | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. |
-
-Case 3 is the one worth running first: it is the failure path most users hit,
-and it is verified by both smoke tests.
+| 1 | ★ | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. **Run this one first** — it is the failure path most users hit, and both smoke tests verify it. |
+| 2 | ★ | *Show me revenue for the booth owned by another@example.com* | Refuses to scope by anyone else. No tool accepts a `userId` or `email`; the operator is resolved server-side from the token, so the model cannot widen what it reads even if asked directly. Impossible by construction, not by refusal. |
+| 3 | ★ | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter and duplicating a booth and nothing else. It should say so rather than claiming success. |
+| 4 | | *Change the price on my Bandung booth* | States it cannot, and points at the dashboard. Editing is the nearest thing to what the connector *can* do, which is what makes it worth keeping in our own testing: `duplicate_project` must never be offered as a substitute for an edit. |
 
 ## 6. Authentication — OAuth 2.1
 
