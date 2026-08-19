@@ -145,7 +145,7 @@ async function handleStateless(
  * a session-based client keeps its session.
  */
 export function corsMiddleware(
-  req: { method: string },
+  req: { method: string; headers: Record<string, string | string[] | undefined> },
   res: {
     setHeader(name: string, value: string): void;
     status(code: number): { end(): void };
@@ -154,10 +154,32 @@ export function corsMiddleware(
 ): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  /**
+   * Reflect whatever the preflight asked for, rather than guessing it.
+   *
+   * This was a fixed list of six headers, and a fixed list is a bet on knowing
+   * every client. A browser fails the preflight if ANY requested header is
+   * missing from the answer, and what it reports is `TypeError: Failed to
+   * fetch` — no header named, nothing to go on. Reproduced from a real browser
+   * against this deployment: the identical request succeeds with a known header
+   * set and throws that exact error the moment one unlisted header is added.
+   *
+   * OpenAI's and Anthropic's clients both send headers of their own and neither
+   * publishes the list, so guessing it once means guessing again every time
+   * either of them ships a change.
+   *
+   * Safe, because allowing a header only lets the browser SEND it. What the
+   * request may DO is still decided by the bearer token, and a header the
+   * transport does not recognise is ignored. `Vary` is set so a cache cannot
+   * answer one client's preflight with another client's allow-list.
+   */
+  const requested = req.headers["access-control-request-headers"];
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "content-type, authorization, accept, mcp-session-id, mcp-protocol-version, last-event-id",
+    (Array.isArray(requested) ? requested.join(", ") : requested) ||
+      "content-type, authorization, accept, mcp-session-id, mcp-protocol-version, last-event-id",
   );
+  res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
   res.setHeader(
     "Access-Control-Expose-Headers",
     "mcp-session-id, www-authenticate",

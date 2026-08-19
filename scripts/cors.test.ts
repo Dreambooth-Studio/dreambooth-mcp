@@ -18,14 +18,19 @@ import { corsMiddleware } from "../src/http.js";
  * debug, so it is pinned here.
  */
 
-function run(method: string) {
+function run(method: string, requestedHeaders?: string) {
   const headers: Record<string, string> = {};
   let status: number | undefined;
   let ended = false;
   let nexted = false;
 
   corsMiddleware(
-    { method },
+    {
+      method,
+      headers: requestedHeaders
+        ? { "access-control-request-headers": requestedHeaders }
+        : {},
+    },
     {
       setHeader(name: string, value: string) {
         headers[name.toLowerCase()] = value;
@@ -97,4 +102,26 @@ test("a real request falls through", () => {
   const { nexted, ended } = run("POST");
   assert.ok(nexted, "POST must reach the MCP transport");
   assert.ok(!ended);
+});
+
+test("whatever the preflight asks for is allowed", () => {
+  // A fixed allow-list is a bet on knowing every client's headers. OpenAI and
+  // Anthropic both send their own and neither publishes the list, and a browser
+  // fails the whole preflight over one missing entry — reporting only
+  // "Failed to fetch", with no indication which header caused it.
+  const { headers } = run("OPTIONS", "content-type, x-stainless-lang, openai-beta");
+  assert.equal(
+    headers["access-control-allow-headers"],
+    "content-type, x-stainless-lang, openai-beta"
+  );
+  // Vary, so a cache cannot answer one client's preflight with another's list.
+  assert.ok(headers["vary"].includes("Access-Control-Request-Headers"));
+});
+
+test("a request that asks for nothing still gets a usable default", () => {
+  const { headers } = run("POST");
+  const allowed = headers["access-control-allow-headers"].toLowerCase();
+  for (const h of ["content-type", "authorization", "mcp-session-id"]) {
+    assert.ok(allowed.includes(h), `${h} must be allowed`);
+  }
 });
