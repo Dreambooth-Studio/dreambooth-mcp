@@ -130,12 +130,72 @@ async function handleStateless(
     return;
   }
 
+  /**
+   * Accept `application/json` alone on this path.
+   *
+   * The SDK refuses with 406 unless a client offers BOTH `application/json`
+   * and `text/event-stream`. That rule protects a transport that might answer
+   * with a stream — and since `enableJsonResponse` below, this one never can.
+   * Refusing a request we are about to answer in JSON, because the client did
+   * not also offer a format we will never send, is a 406 with nothing behind
+   * it. A scanner that does not expect one has no way to read it as anything
+   * but a broken server.
+   *
+   * Narrow on purpose: only the stateless path, only when the client already
+   * asked for JSON, and only by ADDING the type the SDK wants. A client that
+   * offers neither still gets its 406.
+   */
+  const accept = String(req.headers.accept ?? "");
+  if (
+    accept.includes("application/json") &&
+    !accept.includes("text/event-stream")
+  ) {
+    const widened = `${accept}, text/event-stream`;
+    req.headers.accept = widened;
+    /**
+     * `rawHeaders` as well, and this is not belt-and-braces.
+     *
+     * The SDK's Node transport is a wrapper that converts the request into a
+     * Web `Request` through `@hono/node-server`, and that conversion reads
+     * `rawHeaders` — the flat [name, value, name, value] array — not the
+     * parsed `headers` object. Setting only `headers.accept` changes nothing
+     * the transport will ever look at, which is exactly what happened the
+     * first time this was written: the shim was in the right place, ran on the
+     * right request, and the 406 did not move.
+     */
+    const raw = (req as unknown as { rawHeaders?: string[] }).rawHeaders;
+    if (Array.isArray(raw)) {
+      let found = false;
+      for (let i = 0; i < raw.length; i += 2) {
+        if (raw[i]?.toLowerCase() === "accept") {
+          raw[i + 1] = widened;
+          found = true;
+        }
+      }
+      if (!found) raw.push("accept", widened);
+    }
+  }
+
   const tokens = token ? SessionTokens.forRequest(token) : new SessionTokens();
 
   const transport = new StreamableHTTPServerTransport({
     // undefined is the SDK's documented stateless mode: no session id is
     // minted, and no initialize handshake is required first.
     sessionIdGenerator: undefined,
+    /**
+     * Answer as plain JSON, not as a one-frame SSE stream.
+     *
+     * This path can never push anything — the server is closed on the response
+     * — so wrapping a single reply in `event: message
+data: {…}` buys nothing
+     * and costs two failure modes: a client that reasonably calls `res.json()`
+     * on a request/response exchange gets a parse error, and any proxy that
+     * buffers by content type can hold the reply instead of forwarding it.
+     *
+     * Does NOT loosen Accept validation. The SDK still refuses with 406 unless
+     * the client offers both `application/json` and `text/event-stream`.
+     */
+    enableJsonResponse: true,
     enableDnsRebindingProtection: config.allowedHosts.length > 0,
     allowedHosts: config.allowedHosts.length ? config.allowedHosts : undefined,
   });
@@ -246,6 +306,16 @@ export function startHttpServer(config: Config): void {
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
+      /**
+       * Which build this actually is.
+       *
+       * `version` comes from a constant and does not move between deploys, so
+       * /health could not tell a deploy from three weeks ago apart from one
+       * from a minute ago — and "fixed but not deployed" looks exactly like
+       * "not fixed". That ambiguity cost real time during the tool-scan
+       * investigation.
+       */
+      commit: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "unknown",
       service: SERVER_NAME,
       version: SERVER_VERSION,
       sessions: sessions.size,
