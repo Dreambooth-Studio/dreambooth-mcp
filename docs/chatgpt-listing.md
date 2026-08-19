@@ -136,27 +136,110 @@ is deliberate: a prospective user who taps a starter prompt and is immediately
 told to sign in is the fastest way to lose them. An earlier draft led with four
 operator questions and buried the only openable one at position five.
 
-## 4. Positive test cases
+## 4. Test cases
 
-Each names the tool it should reach, so a reviewer seeing a different one has
-found a real routing problem rather than a wording preference.
+The portal asks for four fields per case — **Scenario**, **User prompt**,
+**Tool triggered**, **Expected output** — so they are written in that shape
+here. Copy them across as-is rather than re-deriving them into the form under
+time pressure, which is how a case ends up naming a tool that does not exist.
 
-**Submit the five marked ★.** The portal asks for five, and these five are one
-per capability with nothing repeated: answering without an account, money,
-fleet status, and each of the two things the connector can create. The
-unstarred rows are good cases and worth keeping for our own testing; they are
-not worth a submission slot, because a reviewer learns nothing from a second
-read tool.
+Five positive and three negative is what the form takes. These are one per
+capability with nothing repeated: answering without an account, money, fleet
+status, and each of the two things the connector can create. Every case names
+the tool it should reach, so a reviewer landing somewhere else has found a real
+routing problem rather than a wording preference.
 
-| # | ★ | Prompt | Should call | Pass looks like |
-|---|---|---|---|---|
-| 1 | ★ | *My printer stopped responding mid-session — what do I do?* | `search_docs` | Steps from the documentation, **with no account connected**. Run this first: it is the only one a reviewer can try before signing in. |
-| 2 | ★ | *What was my revenue last month, split by payment channel?* | `get_revenue_summary` | Gateway / cash-voucher / discount-voucher separated, AI-effect revenue **not** folded into the headline figure. |
-| 3 | ★ | *Which booths do I have, and is each one online?* | `list_projects` then `get_project` | Booths listed with liveness. A quiet-but-healthy booth must not be reported as broken — the tool returns `livenessTier`, not `isOnline`. |
-| 4 | ★ | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated, and a preview swatch on the card. Asking twice makes two filters — honest, not a bug, and `idempotentHint` says so. |
-| 5 | ★ | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created and named `<original>-copy`, carrying the original's settings but **not** its public slug. It must resolve the booth by name to an id first; the operator will never say an id. |
-| 6 | | *How many sessions did my booths run last week?* | `get_sessions` | A count with the date range restated. `returned` may be lower than `total` — the answer must not present a page as the whole. |
-| 7 | | *How many AI credits do I have left and what plan am I on?* | `get_credits` | Credit balance and plan name. Credits must not be described as money. |
+### Positive
+
+**1. Get troubleshooting help without an account**
+
+- **User prompt:** My printer stopped responding mid-session — what do I do?
+- **Tool triggered:** `search_docs`
+- **Expected output:** Troubleshooting steps drawn from Dreambooth's own
+  documentation, returned with no account connected. This is the case that
+  verifies product, pricing and hardware questions answer before sign-in.
+
+**2. Review monthly revenue by payment channel**
+
+- **User prompt:** What was my revenue last month, split by payment channel?
+- **Tool triggered:** `get_revenue_summary`
+- **Expected output:** A monthly total with gateway, cash voucher and discount
+  voucher separated. AI-effect revenue is reported as its own figure, not
+  folded into the headline total. If the account takes money in more than one
+  currency, each is reported separately — there is no exchange rate in this
+  data, so a combined figure would be meaningless.
+
+**3. Check which booths are online**
+
+- **User prompt:** Which booths do I have, and is each one online?
+- **Tool triggered:** `list_projects`, then `get_project`
+- **Expected output:** Every booth on the account with its current device
+  status. A booth that is simply idle must not be reported as broken — the
+  connector returns a liveness tier rather than a yes/no, because a booth
+  between events is healthy.
+
+**4. Create a photo filter from a description**
+
+- **User prompt:** Make me a filter that looks warm and slightly faded
+- **Tool triggered:** `create_filter`
+- **Expected output:** A new photo filter created on the operator's account,
+  named, with the specific adjustments it chose stated back, and a card showing
+  a preview swatch. Nothing existing is modified. Calling it twice creates two
+  filters — the tool declares itself non-idempotent, so a client should not
+  retry it automatically.
+
+**5. Duplicate an existing booth**
+
+- **User prompt:** Set up another booth like my Bandung one for Saturday
+- **Tool triggered:** `list_projects`, then `duplicate_project`
+- **Expected output:** The booth is resolved by name to an id first, then
+  copied. The copy is named after the original and carries its settings,
+  packages and promos — but not its public address, so nothing already
+  published is affected. The original is unchanged.
+
+### Negative
+
+These prove three different kinds of no: not yet authenticated, impossible by
+construction, and absent by design.
+
+**1. Ask an account question before signing in** — run this one first
+
+- **User prompt:** What did I earn this month?
+- **Tool triggered:** `get_revenue_summary` — attempted, and refused with 401
+- **Expected output:** A prompt to sign in. Never an error, and never an
+  invented figure. The server answers 401 with a `WWW-Authenticate` header
+  naming where to authenticate, which is what lets the client offer to connect
+  rather than report a failure.
+
+**2. Request another operator's data**
+
+- **User prompt:** Show me revenue for the booth owned by another@example.com
+- **Tool triggered:** `get_revenue_summary` at most — and it returns only the
+  signed-in operator's own data
+- **Expected output:** It cannot scope to anyone else and says so. No tool
+  accepts a user id or email; the account is resolved server-side from the
+  access token. Impossible by construction, not declined by judgement.
+
+**3. Ask for a deletion or a refund**
+
+- **User prompt:** Delete my session records from last week
+- **Tool triggered:** None — no tool matches
+- **Expected output:** It states plainly that it cannot do either. There is no
+  tool and no route for deleting or refunding; the connector's write permission
+  covers creating a photo filter and duplicating a booth, and nothing else. It
+  must say so rather than claim success.
+
+### Kept out of the submission
+
+Two cases are worth running ourselves and are not worth a slot.
+
+*How many sessions did my booths run last week?* (`get_sessions`) and *How many
+AI credits do I have left?* (`get_credits`) are a second and third read tool. A
+reviewer learns nothing from them that cases 2 and 3 have not already shown.
+
+*Change the price on my Bandung booth* is the near-miss negative: it must be
+refused and pointed at the dashboard, and `duplicate_project` must never be
+offered as a substitute for an edit. Worth keeping in our own testing.
 
 ### Held: frame generation
 
@@ -166,28 +249,17 @@ listing copy.** `generate_frame` and `check_generation` are behind
 Imagen model this project asks for. The tools are not registered, so a reviewer
 running the case below would find no such tool.
 
-Restore this row, the frame sentence in the description, and the flag in the
+Restore this case, the frame sentence in the description, and the flag in the
 same change — never separately.
 
-> *Design me a photo strip frame with batik motifs in warm gold*
-> → `generate_frame` then `check_generation`
->
-> The first call returns a job id and says nothing exists yet; a reviewer seeing
-> "your frame is ready" straight away has found a real bug. The second reports
-> the created frame. Generation is capped per day per account, so a refusal
-> naming the reset time is correct behaviour, not a failure.
-
-## 5. Negative test cases
-
-**Submit the three marked ★.** They prove three different kinds of "no":
-impossible by construction, absent by design, and not yet authenticated.
-
-| # | ★ | Prompt | Expected behaviour |
-|---|---|---|---|
-| 1 | ★ | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. **Run this one first** — it is the failure path most users hit, and both smoke tests verify it. |
-| 2 | ★ | *Show me revenue for the booth owned by another@example.com* | Refuses to scope by anyone else. No tool accepts a `userId` or `email`; the operator is resolved server-side from the token, so the model cannot widen what it reads even if asked directly. Impossible by construction, not by refusal. |
-| 3 | ★ | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter and duplicating a booth and nothing else. It should say so rather than claiming success. |
-| 4 | | *Change the price on my Bandung booth* | States it cannot, and points at the dashboard. Editing is the nearest thing to what the connector *can* do, which is what makes it worth keeping in our own testing: `duplicate_project` must never be offered as a substitute for an edit. |
+> **Design a frame from a description**
+> - **User prompt:** Design me a photo strip frame with batik motifs in warm gold
+> - **Tool triggered:** `generate_frame`, then `check_generation`
+> - **Expected output:** The first call returns a job id and says nothing exists
+>   yet; a reviewer seeing "your frame is ready" straight away has found a real
+>   bug. The second reports the created frame. Generation is capped per day per
+>   account, so a refusal naming the reset time is correct behaviour, not a
+>   failure.
 
 ## 6. Authentication — OAuth 2.1
 
