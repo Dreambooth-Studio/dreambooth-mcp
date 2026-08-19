@@ -1,5 +1,6 @@
 import type express from "express";
 import type { Config } from "../config.js";
+import { SUPPORTED_SCOPES } from "../auth/scopes.js";
 
 /**
  * Discovery. Everything a client reads BEFORE it has a token.
@@ -62,7 +63,12 @@ export function registerWellKnown(app: express.Express, config: Config): void {
         // The Studio. Users, Google sign-in and the account model live there; a
         // second identity system here would be one more thing to keep in sync.
         authorization_servers: [config.apiUrl],
-        scopes_supported: ["booths:read"],
+        // Everything the Studio can grant, not everything it grants by default.
+        // A client builds its authorization request from this list, so naming
+        // only `booths:read` here is what would keep `booths:write` unreachable
+        // no matter what the Studio supports. The operator still approves each
+        // scope on a consent screen that names it.
+        scopes_supported: SUPPORTED_SCOPES,
         bearer_methods_supported: ["header"],
         resource_name: "Dreambooth Studio",
         resource_documentation: "https://dreamboothstudio.com/en/docs",

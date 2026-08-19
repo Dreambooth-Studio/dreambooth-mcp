@@ -104,6 +104,7 @@ async function handleStateless(
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
+    bearerAuth: token !== null,
   });
 
   // Closed on the response, not after handleRequest returns: the response may

@@ -19,6 +19,14 @@ export const AUTH_REQUIRED_TOOLS = new Set([
   "get_revenue_summary",
   "get_credits",
   "get_wallet_transactions",
+  // The write tools are registered only when a request already carries a
+  // bearer (see createServer), so a call without one would otherwise come back
+  // as "unknown tool" — which tells the client nothing and starts no sign-in.
+  // Listing them here turns that into the 401 that begins the OAuth flow.
+  "create_filter",
+  "duplicate_project",
+  "generate_frame",
+  "check_generation",
 ]);
 
 /**
