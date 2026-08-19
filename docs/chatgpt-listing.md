@@ -128,13 +128,30 @@ of the same call.
 1. `What hardware do I need to start a photobooth business?`
 2. `How much does Dreambooth cost, and what's in each plan?`
 3. `How did my booths do last week?`
-4. `What did I earn this month, and how much of it was cash?`
+4. `Make me a filter that looks warm and slightly faded`
 5. `Are all my booths online right now?`
 
 **The first two run without an account** — both are `search_docs`. That ordering
 is deliberate: a prospective user who taps a starter prompt and is immediately
 told to sign in is the fastest way to lose them. An earlier draft led with four
 operator questions and buried the only openable one at position five.
+
+**Number 4 replaced "What did I earn this month, and how much of it was cash?"**
+That is a good prompt and it demonstrates a real distinction — but it overlapped
+with 3 as "reporting", and the listing now claims the connector creates things
+while nothing here demonstrated it. The claim most likely to be challenged is
+the one a reviewer should be able to tap. Keep the earnings prompt as a sixth if
+the form allows six.
+
+A filter rather than a booth duplicate, on purpose: `create_filter` needs
+nothing to already exist, returns in seconds and renders a card, whereas
+`duplicate_project` needs the account to own a booth worth copying — which a
+reviewer's demo account may not — and creating a whole booth is a heavy first
+impression.
+
+The wording matters too. It makes the model do the part that is actually hard,
+turning "warm and slightly faded" into numbers on the right scales. A prompt
+like "create a filter with contrast 112" would demonstrate nothing but typing.
 
 ## 4. Positive test cases (7 submittable, 1 held)
 
