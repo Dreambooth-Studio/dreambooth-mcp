@@ -1,0 +1,38 @@
+# Runs the tests on a pull request, which nothing did before.
+#
+# Worth stating why this exists rather than assuming it is obvious: this repo
+# had no `pull_request` trigger at all, so every "N tests pass" line in every
+# PR description here has been a claim made by hand on someone's laptop. The
+# test suite covers things a reviewer cannot check by reading — that the write
+# tools are absent without a bearer, that a scope the discovery documents
+# advertise is one the Studio will actually grant, that a job is unreadable by
+# any credential but the one that started it. None of that is protected if
+# nothing runs it.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the `engines.node` floor in package.json. The tests use
+          # node:test, so the runtime is the test framework here.
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Typecheck before tests: a type error is the cheaper failure to read,
+      # and tsx would otherwise run straight past one into a confusing
+      # assertion failure.
+      - run: npm run typecheck
+
+      - run: npm test
