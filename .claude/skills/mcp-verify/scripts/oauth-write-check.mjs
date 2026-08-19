@@ -260,8 +260,22 @@ if (frame?.result?.isError || !frameOut?.jobId) {
   ok(
     done?.state === "done" && Boolean(done?.frameId),
     "the frame was actually created",
-    done ? `state=${done.state} ${done.frameId ?? done.error ?? ""}`.slice(0, 110) : "still running after 2 minutes"
+    done ? `state=${done.state} ${done.frameId ?? ""}` : "still running after 2 minutes"
   );
+  /**
+   * The whole error, not a slice of it.
+   *
+   * This was truncated to 110 characters and cost a diagnosis: a Vertex 404
+   * names the full publisher-model path, and the project, region and model id
+   * in it are the three things you need to tell "wrong region" apart from
+   * "model does not exist for this project". The first 110 characters contain
+   * exactly enough to see that something is wrong and not enough to say what.
+   */
+  if (done?.error) {
+    console.log("");
+    console.log("      full error:");
+    console.log(`      ${String(done.error)}`);
+  }
 }
 
 console.log("");
