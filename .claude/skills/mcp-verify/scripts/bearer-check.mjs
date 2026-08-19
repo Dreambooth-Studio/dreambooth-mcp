@@ -205,6 +205,35 @@ const TOOLS = [
 ];
 
 /**
+ * Tools that must be REFUSED on this path, and refused readably.
+ *
+ * This is the security property the write scope was built around, and until
+ * now nothing had ever asked the live Studio about it. The token this script
+ * holds comes from the device flow: one year, no scope, no revocation. It must
+ * not be able to create anything, and the Studio enforces that independently
+ * of the MCP server via `judgeBearerWrite` returning "unscoped".
+ *
+ * Inverted expectations, so read the results carefully:
+ *
+ *   PASS = the call came back as a refusal with a sentence a model can relay
+ *   FAIL = something was CREATED, which is a hole in the guard, or the refusal
+ *          was unreadable, which leaves an operator with nothing to act on
+ *
+ * The arguments are deliberately identifiable. If one of these ever does get
+ * through, the row it leaves behind should say where it came from rather than
+ * looking like something the operator made.
+ */
+const MUST_REFUSE = [
+  // Synchronous, and the real test: if the guard has a hole this CREATES a
+  // filter, which is why the name says so.
+  ["create_filter", { name: "bearer-check MUST-NOT-EXIST", adjustments: { contrast: 101 } }],
+  // Deliberately a bogus project id. Auth now runs before the source lookup,
+  // so a hole in the guard shows up as a 404 rather than as a duplicated
+  // booth — a canary that cannot cost anything even when it fires.
+  ["duplicate_project", { projectId: "000000000000000000000000" }],
+];
+
+/**
  * A brand-new client per call, with no session id and never an initialize.
  * That is deliberate: it is the harshest version of what ChatGPT on iOS and
  * macOS does, and it is what the 2026-07-28 spec makes universal.
@@ -248,6 +277,85 @@ for (const [name, args] of TOOLS) {
   }
 }
 
+// ---- writes must be refused on this path ------------------------------------
+
+console.log("");
+console.log("Attempting writes with the device-flow token (all must be REFUSED):");
+console.log("");
+
+for (const [name, args] of MUST_REFUSE) {
+  const { status, body } = await callStateless(name, args, token);
+  const errText = body?.error?.message ?? (body?.result?.isError ? textOf(body.result) : "");
+
+  if (!errText) {
+    // Nothing refused it. Either the tool is absent (registration gate), which
+    // is fine but proves nothing about the Studio, or something was created.
+    const created = JSON.stringify(payload(body?.result) ?? {}).slice(0, 120);
+    fail++;
+    console.log(`FAIL  ${name}  NOT refused -> ${created}`);
+    console.log(`      Check the dashboard: this may have created something.`);
+  } else if (/unscoped|read-only|cannot create|sign-in|Unauthorized/i.test(errText)) {
+    pass++;
+    console.log(`OK    ${name}  refused: ${errText.slice(0, 100)}`);
+  } else {
+    // Refused, but not for the reason we are testing. Worth a look rather than
+    // a pass: a 500 also "refuses", and would hide the guard never running.
+    fail++;
+    console.log(`FAIL  ${name}  refused for the wrong reason: ${errText.slice(0, 100)}`);
+  }
+}
+
+/**
+ * generate_frame cannot be checked the same way: it returns a job handle
+ * immediately and the Studio call happens in the background, so a synchronous
+ * look at its result would report "not refused" no matter what happened. The
+ * refusal is only visible through check_generation.
+ *
+ * Worth checking rather than skipping — of the three write tools this is the
+ * one that costs something if the guard leaks, because generation spends a
+ * slice of the operator's daily allowance.
+ */
+{
+  const started = await callStateless(
+    "generate_frame",
+    {
+      stylePrompt: "bearer-check must not exist",
+      size: "strip-2x6",
+      placeholderCount: 1,
+      layoutIntent: "single",
+    },
+    token
+  );
+  const startedErr =
+    started.body?.error?.message ??
+    (started.body?.result?.isError ? textOf(started.body.result) : "");
+
+  if (startedErr) {
+    pass++;
+    console.log(`OK    generate_frame  refused before starting: ${startedErr.slice(0, 80)}`);
+  } else {
+    // It started. The refusal, if the guard works, lands on the job.
+    const jobId = payload(started.body?.result)?.jobId;
+    await new Promise((r) => setTimeout(r, 6000));
+    const checked = await callStateless("check_generation", jobId ? { jobId } : {}, token);
+    const job = payload(checked.body?.result) ?? {};
+
+    if (job.state === "failed" && /unscoped|read-only|cannot create/i.test(job.error ?? "")) {
+      pass++;
+      console.log(`OK    generate_frame  job refused by the Studio: ${String(job.error).slice(0, 80)}`);
+    } else if (job.state === "running") {
+      fail++;
+      console.log(`FAIL  generate_frame  still running after 6s — the Studio did NOT refuse it fast.`);
+      console.log(`      Re-check check_generation; if it completes, the guard has a hole.`);
+    } else {
+      fail++;
+      console.log(`FAIL  generate_frame  state=${job.state} error=${String(job.error ?? "").slice(0, 80)}`);
+      console.log(`      If state is "done", a frame was CREATED by an unscoped token.`);
+    }
+  }
+}
+
+console.log("");
 // A wrong token must be rejected readably, not accepted and not crash.
 const bogus = await callStateless("get_credits", {}, `${token.slice(0, -4)}xxxx`);
 const rejected = bogus.body?.result?.isError || bogus.body?.error;
