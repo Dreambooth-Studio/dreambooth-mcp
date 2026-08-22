@@ -135,6 +135,8 @@ export interface BoothCreated {
   title: string;
   boothUrl: string;
   dashboardUrl: string;
+  /** The booth's rendered welcome thumbnail, else the draft's welcome design — so the card can show it. */
+  imageUrl?: string;
   ownFrameCount: number;
   catalogFrameCount: number;
   filterCount: number;

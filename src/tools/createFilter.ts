@@ -22,6 +22,8 @@ export const createFilterOutput = {
   isPublic: z.boolean().optional(),
   adjustments: z.record(z.number()).optional(),
   dashboardUrl: z.string().optional(),
+  /** The saved filter on the Studio's sample photo, for the card. Best-effort. */
+  previewUrl: z.string().optional(),
 };
 
 interface FilterDoc {
@@ -75,6 +77,25 @@ export function buildCreateFilter(studio: StudioClient, config: Config) {
         isPublic: args.isPublic ?? false,
       });
 
+      /**
+       * The look, for the card: the same render `preview_filter` shows, on the
+       * filter as saved. Best-effort — a Studio without the preview route, or a
+       * slow render, must not turn a filter that was created into an error.
+       */
+      let previewUrl: string | undefined;
+      try {
+        const preview = await studio.get<{ previewUrl?: string }>(
+          "/api/filters/preview",
+          { adjustments: JSON.stringify(created?.adjustments ?? args.adjustments ?? {}) },
+          { timeoutMs: 30_000 }
+        );
+        if (typeof preview?.previewUrl === "string" && preview.previewUrl.startsWith("https://")) {
+          previewUrl = preview.previewUrl;
+        }
+      } catch {
+        /* the card shows the numbers and the link instead */
+      }
+
       return {
         kind: "filter" as const,
         id: created?._id,
@@ -84,6 +105,7 @@ export function buildCreateFilter(studio: StudioClient, config: Config) {
         // decides what it stores, and reporting what we sent would hide the
         // difference the moment those two diverge.
         adjustments: created?.adjustments ?? args.adjustments,
+        previewUrl,
         dashboardUrl: created?._id
           ? `${config.apiUrl}/dashboard/filters/${created._id}`
           : undefined,

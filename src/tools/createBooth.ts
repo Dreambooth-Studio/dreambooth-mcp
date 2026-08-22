@@ -114,7 +114,13 @@ export async function createBoothWork(
   config: Config,
   args: CreateBoothArgs,
   ctx: JobContext,
-  options: { draftTerms?: string[]; pollSleep?: (ms: number) => Promise<void> } = {}
+  options: {
+    /** The draft's frame tags + mood, for the starter-frame match. */
+    draftTerms?: string[];
+    /** The draft's welcome design, shown on the card if no thumbnail came back. */
+    draftImage?: string;
+    pollSleep?: (ms: number) => Promise<void>;
+  } = {}
 ): Promise<BoothCreated> {
   const wait = options.pollSleep ?? sleep;
   const get = async <T>(path: string, query: Record<string, string | undefined>) =>
@@ -252,14 +258,20 @@ export async function createBoothWork(
   }
   const slug = created?.slug || args.slug;
 
-  // 7. The id, for a dashboard link that opens the editor. Non-fatal: the
-  // booth exists either way, and the list page is a fine fallback.
+  // 7. The id, for a dashboard link that opens the editor, and the rendered
+  // welcome thumbnail, for the card. Non-fatal: the booth exists either way,
+  // the list page is a fine fallback, and the draft's welcome design stands
+  // in for the thumbnail.
   let projectId: string | undefined;
+  let imageUrl: string | undefined = options.draftImage || undefined;
   try {
-    const doc = await get<{ _id?: string }>("/api/projects/by-slug", { slug });
+    const doc = await get<{ _id?: string; thumbnail?: string }>("/api/projects/by-slug", { slug });
     if (doc?._id) projectId = String(doc._id);
+    if (typeof doc?.thumbnail === "string" && doc.thumbnail.startsWith("https://")) {
+      imageUrl = doc.thumbnail;
+    }
   } catch {
-    /* fall back to the list page */
+    /* fall back to the list page and the draft's image */
   }
 
   return {
@@ -270,6 +282,7 @@ export async function createBoothWork(
     dashboardUrl: projectId
       ? `${config.apiUrl}/dashboard/projects/${projectId}/editor`
       : `${config.apiUrl}/dashboard/projects`,
+    imageUrl,
     ownFrameCount,
     catalogFrameCount: frameIds.length,
     filterCount: filterIds.length,
@@ -361,12 +374,13 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
       const draftTerms = latestDraft?.result
         ? [...latestDraft.result.frameTags, latestDraft.result.filterMood]
         : [];
+      const draftImage = latestDraft?.result?.welcomePortraitUrl;
 
       try {
         const job = jobs.start<BoothCreated>(
           ownerKey,
           what,
-          (ctx) => createBoothWork(studio, config, args, ctx, { draftTerms }),
+          (ctx) => createBoothWork(studio, config, args, ctx, { draftTerms, draftImage }),
           { kind: "booth", maxRuntimeMs: CREATE_JOB_MAX_RUNTIME_MS, ref: args.draftId }
         );
 

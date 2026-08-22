@@ -328,7 +328,25 @@ export function createServer(
       title: "What was created",
       html: writeResultWidgetHtml,
       description:
-        "A card confirming what was just created — the filter's name with a preview swatch, the duplicated booth, or the saved frame — and a link to it in the dashboard.",
+        "A card confirming the duplicated booth — its name and what it was copied from — and a link to it in the dashboard.",
+    });
+
+    /**
+     * The card everything GENERATED renders into — frames, booths, filters
+     * and their previews — from the moment it is asked for to the moment it
+     * exists. A start/refine/create handle renders as a live skeleton that
+     * polls `check_generation` itself and redraws as the preview; the done
+     * states show the thing. The one card that loads an image, so the one
+     * card whose CSP names an origin. See GENERATION_IMAGE_ORIGINS for why these.
+     */
+    registerWidget(server, {
+      uri: GENERATION_WIDGET_URI,
+      name: "generation-preview-card",
+      title: "Preview",
+      html: generationWidgetHtml,
+      description:
+        "A card showing the thing being made and, when it is done, the thing itself: a frame preview, a booth draft, a created booth, a saved frame, a created filter, or a filter preview. While work runs it shows a skeleton and updates itself. A preview is not a saved thing.",
+      csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
     });
 
     const createFilter = buildCreateFilter(studio, config);
@@ -336,7 +354,7 @@ export function createServer(
       createFilter.name,
       withWidget(
         { ...createFilter.config, annotations: CREATES },
-        WRITE_RESULT_WIDGET_URI,
+        GENERATION_WIDGET_URI,
         {
           invoking: "Membuat filter…",
           invoked: "Filter dibuat",
@@ -368,10 +386,12 @@ export function createServer(
      * dashboard's Frame Studio thread: start, look, refine in the same thread,
      * and only `save_frame` puts a frame in the operator's list.
      *
-     * No widget on `start_frame` / `refine_frame`: at the moment they return,
-     * nothing has been generated, and a card is a claim that something has.
-     * The preview card belongs on `check_generation`, the only tool that can
-     * show an image; the "frame created" card on `save_frame`.
+     * Every one of them renders the generation card. A start or refine returns
+     * while nothing exists yet, so its card is a LIVE one: a skeleton of the
+     * thing being made that polls `check_generation` itself and redraws as the
+     * preview when the work is done — the operator watches it appear, nobody
+     * has to ask. `check_generation` is widget-accessible for exactly that;
+     * `save_frame` shows the saved frame's thumbnail.
      *
      * Listed unconditionally, like every other tool here. There used to be a
      * flag, from when these wrapped an Imagen route that could never succeed;
@@ -380,42 +400,41 @@ export function createServer(
      * order — the Studio routes these call must be live first — and that is
      * a note in the README, not a runtime setting.
      */
-    registerWidget(server, {
-      uri: GENERATION_WIDGET_URI,
-      name: "generation-preview-card",
-      title: "Preview",
-      html: generationWidgetHtml,
-      description:
-        "A card showing what background work produced — a frame preview, a booth draft, a created booth — or a filter preview; or that it is still working, or why it failed. A preview is not a saved thing.",
-      // The one card that loads an image, so the one card whose CSP names
-      // an origin. See GENERATION_IMAGE_ORIGINS for why these.
-      csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
-    });
-
     const startFrame = buildStartFrame(studio);
     server.registerTool(
       startFrame.name,
-      { ...startFrame.config, annotations: CREATES },
+      withWidget(
+        { ...startFrame.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Memulai frame…", invoked: "Sedang membuat frame" },
+      ),
       safe(startFrame.handler),
     );
 
     const refineFrame = buildRefineFrame(studio);
     server.registerTool(
       refineFrame.name,
-      { ...refineFrame.config, annotations: CREATES },
+      withWidget(
+        { ...refineFrame.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengubah frame…", invoked: "Sedang mengubah frame" },
+      ),
       safe(refineFrame.handler),
     );
 
     const checkGeneration = buildCheckGeneration(studio, config);
     server.registerTool(
       checkGeneration.name,
-      withWidget(
-        // Reads a status and creates nothing. Saying so is what lets a client
-        // poll without asking the operator each time, which is the only way
-        // polling is tolerable.
-        { ...checkGeneration.config, annotations: READ_ONLY },
-        GENERATION_WIDGET_URI,
-        { invoking: "Mengecek…", invoked: "Pratinjau" },
+      // Reads a status and creates nothing. Saying so is what lets a client
+      // poll without asking the operator each time, which is the only way
+      // polling is tolerable — and widget-accessible, so the live card can
+      // poll it from inside the iframe as well.
+      widgetAccessible(
+        withWidget(
+          { ...checkGeneration.config, annotations: READ_ONLY },
+          GENERATION_WIDGET_URI,
+          { invoking: "Mengecek…", invoked: "Pratinjau" },
+        ),
       ),
       safe(checkGeneration.handler),
     );
@@ -425,7 +444,7 @@ export function createServer(
       saveFrame.name,
       withWidget(
         { ...saveFrame.config, annotations: CREATES },
-        WRITE_RESULT_WIDGET_URI,
+        GENERATION_WIDGET_URI,
         { invoking: "Menyimpan frame…", invoked: "Frame disimpan" },
       ),
       safe(saveFrame.handler),
@@ -455,21 +474,33 @@ export function createServer(
     const startBooth = buildStartBooth(studio);
     server.registerTool(
       startBooth.name,
-      { ...startBooth.config, annotations: CREATES },
+      withWidget(
+        { ...startBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Merancang booth…", invoked: "Sedang merancang booth" },
+      ),
       safe(startBooth.handler),
     );
 
     const refineBooth = buildRefineBooth(studio);
     server.registerTool(
       refineBooth.name,
-      { ...refineBooth.config, annotations: CREATES },
+      withWidget(
+        { ...refineBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengubah rancangan…", invoked: "Sedang mengubah rancangan" },
+      ),
       safe(refineBooth.handler),
     );
 
     const createBooth = buildCreateBooth(studio, config);
     server.registerTool(
       createBooth.name,
-      { ...createBooth.config, annotations: CREATES },
+      withWidget(
+        { ...createBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Membuat booth…", invoked: "Sedang membuat booth" },
+      ),
       safe(createBooth.handler),
     );
   }

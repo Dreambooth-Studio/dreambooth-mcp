@@ -102,3 +102,45 @@ test("preview and create share one adjustments schema, so what was seen is what 
   assert.ok(parsed.success);
   assert.deepEqual(parsed.data, { contrast: 112 });
 });
+
+/* ------------------------------------------------------ the created card --- */
+
+test("create_filter shows the saved filter on the sample photo, best-effort", async () => {
+  const calls: Array<{ method: string; path: string }> = [];
+  const studio = {
+    post: async (path: string) => {
+      calls.push({ method: "POST", path });
+      return { _id: "f1", name: "Senja Hangat", isPublic: false, adjustments: { contrast: 112, sepia: 18 } };
+    },
+    get: async (path: string, query?: Record<string, string | undefined>) => {
+      calls.push({ method: "GET", path });
+      assert.deepEqual(JSON.parse(String(query?.adjustments)), { contrast: 112, sepia: 18 }, "the filter AS SAVED");
+      return { previewUrl: "https://cdn.dreambooth-team.workers.dev/filter-previews/f1.jpg" };
+    },
+  } as unknown as StudioClient;
+
+  const result = await buildCreateFilter(studio, CONFIG).handler({
+    name: "Senja Hangat",
+    adjustments: { contrast: 112, sepia: 18 },
+  });
+  assert.deepEqual(
+    calls.map((c) => `${c.method} ${c.path}`),
+    ["POST /api/filters", "GET /api/filters/preview"],
+    "created first, previewed after — the preview can never block the save"
+  );
+  assert.equal(result.id, "f1");
+  assert.equal(result.previewUrl, "https://cdn.dreambooth-team.workers.dev/filter-previews/f1.jpg");
+});
+
+test("a filter is still created when the preview is unavailable", async () => {
+  const studio = {
+    post: async () => ({ _id: "f2", name: "Mono", isPublic: false, adjustments: { grayscale: 100 } }),
+    get: async () => {
+      throw new StudioError("Nothing found at /api/filters/preview.", 404, false);
+    },
+  } as unknown as StudioClient;
+
+  const result = await buildCreateFilter(studio, CONFIG).handler({ name: "Mono", adjustments: { grayscale: 100 } });
+  assert.equal(result.id, "f2");
+  assert.equal(result.previewUrl, undefined);
+});

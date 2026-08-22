@@ -169,6 +169,16 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     const tool = listed.tools.find((t) => t.name === name);
     assert.equal(tool?.annotations?.readOnlyHint, true, name);
   }
+
+  // A booth is visible from the moment it is asked for: the start, refine and
+  // create handles render the live generation card (a phone skeleton that
+  // polls check_generation), the preview renders there, and so does the
+  // created filter — with its real preview image.
+  const meta = (name: string) =>
+    (listed.tools.find((t) => t.name === name) as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {};
+  for (const name of [...BOOTH_TOOLS, "preview_filter", "create_filter"]) {
+    assert.equal(meta(name)["openai/outputTemplate"], "ui://widget/generation.html", name);
+  }
 });
 
 /* ----------------------------------------------------- start + check --- */
@@ -428,7 +438,11 @@ function happyCreate(overrides: Partial<Record<string, Reply>> = {}): Reply {
       case "POST /api/projects/onboarding":
         return { slug: (body as { slug: string }).slug };
       case "GET /api/projects/by-slug":
-        return { _id: HEX24("b"), slug: query?.slug };
+        return {
+          _id: HEX24("b"),
+          slug: query?.slug,
+          thumbnail: "https://cdn.dreambooth-team.workers.dev/project/__onboarding__/d-thumbnail.png",
+        };
       default:
         throw new Error(`unexpected ${key}`);
     }
@@ -485,6 +499,8 @@ test("create_booth runs /new's last screens in order and sends no theme", async 
   assert.equal(result.catalogFrameCount, 4);
   assert.equal(result.filterCount, 2);
   assert.equal(result.aiEffect, "Anime Glow");
+  // The booth's rendered thumbnail, for the card.
+  assert.equal(result.imageUrl, "https://cdn.dreambooth-team.workers.dev/project/__onboarding__/d-thumbnail.png");
   assert.ok(seen.some((s) => /link name/i.test(s)) && seen.some((s) => /Creating the booth/.test(s)));
 });
 
@@ -545,10 +561,18 @@ test("a failed id lookup after creation is not a failed creation", async () => {
       },
     })
   );
-  const result = await createBoothWork(studio, CONFIG, CREATE_ARGS, ctxOf([]), { pollSleep: noSleep });
+  const result = await createBoothWork(studio, CONFIG, CREATE_ARGS, ctxOf([]), {
+    pollSleep: noSleep,
+    draftImage: "https://cdn.dreambooth-team.workers.dev/project/__onboarding__/d-welcomeBgPortrait.png",
+  });
   assert.equal(result.slug, "bandung-wedding");
   assert.equal(result.projectId, undefined);
   assert.equal(result.dashboardUrl, "https://studio.example/dashboard/projects");
+  // No thumbnail came back, so the card shows the draft's welcome design.
+  assert.equal(
+    result.imageUrl,
+    "https://cdn.dreambooth-team.workers.dev/project/__onboarding__/d-welcomeBgPortrait.png"
+  );
 });
 
 test("the Studio's create refusals come back as the next step", async () => {

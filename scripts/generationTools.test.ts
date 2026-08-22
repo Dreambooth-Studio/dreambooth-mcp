@@ -154,6 +154,17 @@ test("start, refine and save create; check_generation does not", async () => {
   const check = listed.tools.find((t) => t.name === "check_generation");
   assert.equal(check?.annotations?.readOnlyHint, true);
 
+  // Every generated thing has a card from the moment it is asked for: the
+  // start and refine handles render the live generation card, the saved
+  // frame renders there too, and check_generation is callable from inside
+  // that card so it can update itself.
+  const meta = (name: string) =>
+    (listed.tools.find((t) => t.name === name) as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {};
+  for (const name of ["start_frame", "refine_frame", "save_frame", "check_generation"]) {
+    assert.equal(meta(name)["openai/outputTemplate"], "ui://widget/generation.html", name);
+  }
+  assert.equal(meta("check_generation")["openai/widgetAccessible"], true, "the live card polls it");
+
   // The preview card is the only widget allowed to name an image origin; the
   // others stay closed to the network entirely.
   const resources = await (async () => {

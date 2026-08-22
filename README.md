@@ -304,19 +304,34 @@ operator has finished approving — instead of a URL they have to copy. It is an
 MCP resource (`ui://widget/connect-account.html`) pointed at by `_meta` on the
 tool, per the Apps SDK.
 
-`create_filter` and `duplicate_project` share a second card,
-`ui://widget/write-result.html`. It renders the result and nothing else: what
-was created, a preview swatch for a filter, and a link to it in the dashboard.
-There is no confirmation card and no form — a widget only renders after the
-tool has already written, so confirming would need a second tool that writes
-nothing, and the host's own approval dialog is the real gate. There is no
-"undo" button either: undo means PUT or DELETE, which would widen the scope
-from "create" to "change and delete" for one button.
+`duplicate_project` renders a second card, `ui://widget/write-result.html`. It
+renders the result and nothing else: the copy's name, what it was copied from,
+and a link to it in the dashboard. There is no confirmation card and no form —
+a widget only renders after the tool has already written, so confirming would
+need a second tool that writes nothing, and the host's own approval dialog is
+the real gate. There is no "undo" button either: undo means PUT or DELETE,
+which would widen the scope from "create" to "change and delete" for one
+button. Its CSP names no origin at all, which is what makes it impossible for
+it to talk to the network.
 
-The swatch is an inline SVG with a CSS `filter` applied, so the empty CSP below
-still holds. It names the adjustments it cannot show — sharpening, noise
-reduction, vignette, grain and every LUT have no CSS equivalent, and a swatch
-that silently drops half a filter is worse than no swatch.
+**Everything generated renders in a third card**, `ui://widget/generation.html`
+— the one card whose CSP names an origin, because it shows images from the
+Studio's storage. From the moment a thing is asked for to the moment it
+exists:
+
+- `start_frame` / `refine_frame` / `start_booth` / `refine_booth` /
+  `create_booth` return while the work runs, and their card is **live**: a
+  skeleton of the thing being made (a strip with its photo windows, a phone
+  with a welcome screen) that polls `check_generation` from inside the iframe
+  every few seconds and redraws as the preview when the work is done — the
+  operator watches it appear. `check_generation` is widget-accessible for
+  exactly that; a host without `callTool` just leaves the card at "working".
+- `check_generation` shows the preview (frame image; booth draft with its
+  welcome screen and palette; created booth with its thumbnail and links).
+- `save_frame` shows the saved frame's thumbnail; `create_filter` shows the
+  created filter on the Studio's sample photo (the same render `preview_filter`
+  shows, fetched after the save — best-effort); `preview_filter` shows the
+  preview and names the adjustments it cannot show.
 
 Nothing about this changes other clients. Every tool result carries the payload
 twice: `structuredContent` for widgets, and the same object pretty-printed as

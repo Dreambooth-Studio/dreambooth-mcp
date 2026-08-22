@@ -60,6 +60,7 @@ const BOOTH_CREATED_OUTPUT = z.object({
   title: z.string(),
   boothUrl: z.string(),
   dashboardUrl: z.string(),
+  imageUrl: z.string().optional(),
   ownFrameCount: z.number(),
   catalogFrameCount: z.number(),
   filterCount: z.number(),
