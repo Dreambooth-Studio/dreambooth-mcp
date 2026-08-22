@@ -41,23 +41,6 @@ export interface Config {
    */
   diagnostics: boolean;
   /**
-   * Registers `generate_frame` and `check_generation`.
-   *
-   * **Off by default, and that default is the point.** Frame generation
-   * reaches Vertex Imagen, and Vertex currently answers `404 NOT_FOUND` for
-   * the model this project asks for — so the tools exist, are tested, and
-   * cannot succeed. A tool that is listed and always fails is worse than one
-   * that is absent: a directory reviewer reads it as a broken connector, and
-   * an operator reads it as a broken account.
-   *
-   * So this is not a feature flag in the usual sense. It is a claim gate:
-   * while it is off, nothing in the tool list, the README or the listing copy
-   * promises frame generation. Turn it on — `ENABLE_FRAME_GENERATION=1` — in
-   * the same change that makes a real generation succeed, and put the frame
-   * lines back in `docs/chatgpt-listing.md` at the same time.
-   */
-  frameGeneration: boolean;
-  /**
    * Challenge string issued by the ChatGPT plugin submission portal, served
    * back at /.well-known/openai-apps-challenge to prove we own the host. Empty
    * until a submission is in flight; the route 404s rather than serving blank.
@@ -104,11 +87,6 @@ export function loadConfig(): Config {
     // surprising reading is the dangerous one.
     diagnostics: ["1", "true", "yes"].includes(
       (process.env.MCP_DIAGNOSTICS || "").trim().toLowerCase()
-    ),
-    // Same exact-value rule as diagnostics, for the same reason: the
-    // surprising reading of a flag like this is the dangerous one.
-    frameGeneration: ["1", "true", "yes"].includes(
-      (process.env.ENABLE_FRAME_GENERATION || "").trim().toLowerCase()
     ),
     // Trimmed because this gets pasted out of a web form, and a trailing
     // newline would fail the verification with no visible difference.

@@ -121,7 +121,7 @@ async function handleStateless(
   // and pricing questions need no account.
   if (
     !token &&
-    requiresAuth(req.body, { frameGeneration: config.frameGeneration })
+    requiresAuth(req.body)
   ) {
     sendUnauthorized(res, config, req, {
       description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,
@@ -410,7 +410,7 @@ export function startHttpServer(config: Config): void {
       // exactly that inconsistency in a different place.
       if (
         !existing.tokens.get() &&
-        requiresAuth(req.body, { frameGeneration: config.frameGeneration })
+        requiresAuth(req.body)
       ) {
         sendUnauthorized(res, config, req, {
           description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,

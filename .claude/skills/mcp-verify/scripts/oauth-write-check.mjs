@@ -218,7 +218,14 @@ const listed = await fetch(`${BASE}/mcp`, {
 });
 const listedText = await listed.text();
 const names = [...listedText.matchAll(/"name":"([a-z_]+)"/g)].map((m) => m[1]);
-for (const t of ["create_filter", "duplicate_project", "generate_frame", "check_generation"]) {
+for (const t of [
+  "create_filter",
+  "duplicate_project",
+  "start_frame",
+  "refine_frame",
+  "check_generation",
+  "save_frame",
+]) {
   ok(names.includes(t), `${t} appears in tools/list`);
 }
 
@@ -235,32 +242,80 @@ ok(
   filter?.result?.isError ? textOf(filter.result).slice(0, 100) : `id=${filterOut?.id}`
 );
 
-const frame = await call("generate_frame", {
-  stylePrompt: "warm gold batik motifs, generous margins",
-  size: "strip-2x6",
-  placeholderCount: 3,
-  layoutIntent: "strip",
-  name: `mcp-verify ${stamp}`,
-});
-const frameOut = payload(frame?.result);
-if (frame?.result?.isError || !frameOut?.jobId) {
-  ok(false, "generate_frame started", textOf(frame?.result ?? {}).slice(0, 100));
-} else {
-  ok(true, "generate_frame started", `job=${frameOut.jobId}`);
-  console.log("      waiting up to 2 minutes for the image model...");
-  let done = null;
-  for (let i = 0; i < 24; i++) {
+// The frame flow, the way an operator would run it: start, look, ask for one
+// change, keep the second version. Two generations of the daily allowance per
+// run — which is why this is not a script to run idly.
+
+async function waitForGeneration(jobId, label) {
+  console.log(`      waiting up to 2.5 minutes for the image model (${label})...`);
+  for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 5000));
-    const checked = payload((await call("check_generation", { jobId: frameOut.jobId }))?.result);
-    if (checked?.state && checked.state !== "running") {
-      done = checked;
-      break;
-    }
+    const checked = payload((await call("check_generation", { jobId }))?.result);
+    if (checked?.state && checked.state !== "running") return checked;
   }
+  return null;
+}
+
+const started = await call("start_frame", {
+  prompt: "warm gold batik motifs, generous margins",
+  layout: "strip-3",
+  shape: "rect",
+});
+const startOut = payload(started?.result);
+let generated = null;
+if (started?.result?.isError || !startOut?.jobId) {
+  ok(false, "start_frame started", textOf(started?.result ?? {}).slice(0, 100));
+} else {
+  ok(true, "start_frame started", `job=${startOut.jobId}`);
+  generated = await waitForGeneration(startOut.jobId, "first version");
   ok(
-    done?.state === "done" && Boolean(done?.frameId),
-    "the frame was actually created",
-    done ? `state=${done.state} ${done.frameId ?? done.error ?? ""}`.slice(0, 110) : "still running after 2 minutes"
+    generated?.state === "done" &&
+      Boolean(generated?.imageUrl) &&
+      Boolean(generated?.threadId) &&
+      Boolean(generated?.generationId),
+    "a preview was generated, with a threadId and generationId",
+    generated
+      ? `state=${generated.state} ${generated.imageUrl ?? generated.error ?? ""}`.slice(0, 110)
+      : "still running after 2.5 minutes"
+  );
+}
+
+let chosen = generated?.state === "done" ? generated : null;
+if (chosen) {
+  const refined = await call("refine_frame", {
+    threadId: chosen.threadId,
+    prompt: "the same, but darker and with less ornament",
+  });
+  const refineOut = payload(refined?.result);
+  if (refined?.result?.isError || !refineOut?.jobId) {
+    ok(false, "refine_frame started", textOf(refined?.result ?? {}).slice(0, 100));
+  } else {
+    ok(true, "refine_frame started", `job=${refineOut.jobId}`);
+    const second = await waitForGeneration(refineOut.jobId, "refinement");
+    const sameThread = second?.threadId === chosen.threadId;
+    const newGeneration = Boolean(second?.generationId) && second.generationId !== chosen.generationId;
+    ok(
+      second?.state === "done" && sameThread && newGeneration,
+      "the refinement landed in the same thread as a new generation",
+      second
+        ? `state=${second.state} thread=${sameThread ? "same" : "DIFFERENT"} generation=${newGeneration ? "new" : "SAME"}`
+        : "still running after 2.5 minutes"
+    );
+    if (second?.state === "done") chosen = second;
+  }
+}
+
+if (chosen) {
+  const saved = await call("save_frame", {
+    threadId: chosen.threadId,
+    generationId: chosen.generationId,
+    name: `mcp-verify ${stamp}`,
+  });
+  const savedOut = payload(saved?.result);
+  ok(
+    !saved?.result?.isError && Boolean(savedOut?.frameId),
+    "save_frame created a frame from the chosen generation",
+    saved?.result?.isError ? textOf(saved.result).slice(0, 100) : `id=${savedOut?.frameId}`
   );
 }
 

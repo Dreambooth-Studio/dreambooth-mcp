@@ -48,7 +48,7 @@ it, none of them factual:
 It also promised sign-in "without leaving the conversation", which was false on
 mobile until the OAuth work in §6.
 
-Replacement (1,232 chars — the portal's cap on this field has never been
+Replacement (1,326 chars — the portal's cap on this field has never been
 measured; the version it accepted was 1,146, so trim the closing paragraph
 first if it rejects this one):
 
@@ -66,11 +66,12 @@ weekend, what you earned this month and how much of it was cash, whether a
 booth is online right now, how many AI credits are left, or how much media
 a booth has produced. A sentence back, instead of opening the dashboard.
 
-It can make two things for you: a photo filter from a description of the
-look you want, and a copy of a booth you already run. Everything else it
-only reads. It cannot edit a booth, issue a refund, move money or delete
-anything, and it sees only the account you sign in with. Your booths,
-never another operator's.
+It can make three things for you: a photo filter from a description of
+the look you want, a photo frame designed from a description and refined
+in conversation until it looks right, and a copy of a booth you already
+run. Everything else it only reads. It cannot edit a booth, issue a refund,
+move money or delete anything, and it sees only the account you sign in
+with. Your booths, never another operator's.
 
 When a figure leaves something out it says so. Cash and voucher income
 never reaches the wallet ledger, so income is reported from the sessions
@@ -136,7 +137,7 @@ is deliberate: a prospective user who taps a starter prompt and is immediately
 told to sign in is the fastest way to lose them. An earlier draft led with four
 operator questions and buried the only openable one at position five.
 
-## 4. Positive test cases (7 submittable, 1 held)
+## 4. Positive test cases (8)
 
 Each names the tool it should reach, so a reviewer seeing a different one has
 found a real routing problem rather than a wording preference.
@@ -149,7 +150,7 @@ found a real routing problem rather than a wording preference.
 | 4 | *How many AI credits do I have left and what plan am I on?* | `get_credits` | Credit balance and plan name. Credits must not be described as money. |
 | 5 | *My printer stopped responding mid-session — what do I do?* | `search_docs` | Steps from the documentation, **with no account connected**. |
 | 6 | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated. The card shows a preview swatch. Asking twice makes two filters — that is honest, not a bug, and `idempotentHint` says so. |
-| 8 | ~~*Design me a photo strip frame with batik motifs in warm gold*~~ **HELD** — `generate_frame` is behind `ENABLE_FRAME_GENERATION` and Vertex 404s on the Imagen model, so the tool is not registered and this case must NOT be submitted. Restore this row and the frame sentence in the description together with the flag. | `generate_frame` then `check_generation` | The first call returns a job id and says nothing exists yet — a reviewer seeing "your frame is ready" straight away has found a real bug. The second reports the created frame. Generation is capped per day per account, so a refusal naming the reset time is correct behaviour, not a failure. |
+| 8 | *Design me a photo strip frame with batik motifs in warm gold* | `start_frame`, then `check_generation`; `refine_frame` if changes are asked for; `save_frame` | The first call returns a job id and says nothing exists yet — a reviewer seeing "your frame is ready" straight away has found a real bug. `check_generation` shows a preview and says it is not saved; only `save_frame` creates the frame, and only once the operator has chosen a version. Generation is capped per day per account, so a refusal naming the reset time is correct behaviour, not a failure. |
 | 7 | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created and named `<original>-copy`, carrying the original's settings but **not** its public slug. It must resolve the booth by name to an id first; the operator will never say an id. |
 
 ## 5. Negative test cases (4)
@@ -214,7 +215,12 @@ set**, so every authed tool's success path is untested. A wrongly typed field
 surfaces as an `McpError`, which is a protocol error: the client retries rather
 than relaying, so the operator sees a hang, not a message.
 
-Fix: run every tool once against a real account. Ten minutes.
+Fix: run every tool once against a real account. Ten minutes. For the frame
+tools that means a real start → refine → save round — 
+`.claude/skills/mcp-verify/scripts/oauth-write-check.mjs` does exactly that,
+creates a `mcp-verify <stamp>` frame to delete afterwards, and needs the
+Studio change that adds `/api/ai/frames/start` and `/from-generation` to be
+deployed first.
 
 ### 7.2 Does ChatGPT reuse `Mcp-Session-Id` across turns? — MOOT
 
