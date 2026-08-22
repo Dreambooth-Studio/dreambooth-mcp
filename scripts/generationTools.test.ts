@@ -269,7 +269,7 @@ test("check_generation reports running, then the preview with what the next step
   const running = await check.handler({ jobId: started.jobId });
   assert.equal(running.state, "running");
   assert.equal(running.imageUrl, undefined);
-  assert.match(String(running.note), /nothing has been generated yet/i);
+  assert.match(String(running.note), /nothing exists yet/i);
 
   release(generated("g9"));
   await drained();
@@ -364,8 +364,8 @@ test("an unknown job id points at the thread and the dashboard instead of claimi
   // operator nothing was generated when something may well have been.
   const answer = await check.handler({ jobId: "not-a-real-job" });
   assert.equal(answer.state, "unknown");
-  assert.match(String(answer.error), /refine_frame continues the same thread/i);
-  assert.match(String(answer.error), /check the dashboard/i);
+  assert.match(String(answer.error), /threadId still works with refine_frame/i);
+  assert.match(String(answer.error), /dashboard/i);
   assert.ok(answer.dashboardUrl);
 });
 

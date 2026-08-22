@@ -197,15 +197,23 @@ That is the complete read set. Two more wrap a route that creates something:
 | `refine_frame` | `POST /api/ai/threads/{id}/messages` | Bearer + `booths:write` |
 | `check_generation` | nothing — reads this process | Bearer |
 | `save_frame` | `POST /api/ai/frames/from-generation` | Bearer + `booths:write` |
+| `preview_filter` | `GET /api/filters/preview` | Bearer (read is enough) |
+| `start_booth` | `POST /api/onboarding/generate` | Bearer + `booths:write` |
+| `refine_booth` | `POST /api/onboarding/generate` (regen, or a rebuild) | Bearer + `booths:write` |
+| `create_booth` | `GET by-slug?checkOnly` → `POST /api/onboarding/draft-frames` → `GET /api/onboarding/frames` + `/catalog` (+ `/api/ai-effects/catalog`) → `POST /api/projects/onboarding` → `GET by-slug` | Bearer + `booths:write` |
 
-> **Deploy order matters for the frame tools.** They are listed
+> **Deploy order matters for the frame and booth tools.** They are listed
 > unconditionally — there is no flag — and they call Studio routes that are
-> new: `/api/ai/frames/start`, `/api/ai/frames/from-generation`, and
-> `/api/ai/threads/{id}/messages` opened to OAuth. Deploy that Studio change
-> before a build of this server that carries the tools, or `start_frame`
-> answers "Nothing found" until it lands. `oauth-write-check.mjs` in the
-> mcp-verify skill runs a real start → refine → save round; run it once after
-> both are live.
+> new or newly opened to OAuth: `/api/ai/frames/start`,
+> `/api/ai/frames/from-generation`, `/api/ai/threads/{id}/messages`,
+> `/api/onboarding/generate`, `/api/onboarding/draft-frames`,
+> `/api/projects/onboarding`, `/api/filters/preview`. Deploy that Studio change
+> before a build of this server that carries the tools, or the tools answer
+> with a sentence saying the Studio is not updated yet. Booth generation also
+> needs the Studio's `digital_mode` feature to be live (it is the /new pipeline;
+> when dormant, the booth tools say so). `oauth-write-check.mjs` in the
+> mcp-verify skill runs a real round — add `--booth` for the booth one — run it
+> once after both are live.
 
 Frame generation is the one flow here that is neither a single call nor a
 single answer. An image-model round trip runs 30–90 seconds against a
@@ -222,6 +230,27 @@ generation the operator chose into a frame in their list. Until then
 card all say so rather than leaving a model to guess. Every generation spends
 part of the account's free daily allowance, which is why the descriptions tell
 the model never to iterate on its own initiative.
+
+**Booths follow the same shape**, through the `/new` onboarding pipeline — the
+Studio designs a whole booth from a sentence (spec, welcome screens for phone
+and laptop, in-booth background) and creates it. `start_booth` makes a DRAFT
+(a `draftId`, 60–120 s, a background job); `refine_booth` redraws the welcome
+screen or the in-booth background from an instruction, or rebuilds the whole
+draft from a new description; `create_booth` is the only step that makes a
+booth — it checks the link name first, draws the booth's own three frames,
+picks three starter frames and the Studio's default filter the way /new does,
+and creates the booth with the draft's design, theme and capture mode. The
+draft id is a plain value the model keeps, so a conversation outlives this
+process; drafts last seven days in the Studio. Quotas are the Studio's: 3 full
+generations and 5 redraws per draft, 10 drafts an hour per account. There is
+no spec-patch path — title, headline, colours change only through a redraw or
+a rebuild; title and link name are chosen at create time.
+
+**Filters** are previewed before they exist: `preview_filter` asks the Studio
+to bake its sample photo (or the operator's own preview photo) through the
+booth's real filter pipeline and returns a URL; `create_filter` saves the same
+adjustments. The preview shows 13 of the 31 adjustments and says which it
+cannot — the booth applies all of them.
 
 Jobs live in this process, keyed by a hash of the bearer that started them —
 never the bearer itself, which would mean holding operator credentials for as
@@ -247,7 +276,7 @@ the other one. The Studio enforces the same rule independently — see
 for why the gate here cannot check the scope itself.
 
 Nothing edits, nothing deletes, and nothing touches money. There is no `put` or
-`delete` on `StudioClient`, and the Studio opened exactly five POST handlers to it.
+`delete` on `StudioClient`, and the Studio opened exactly eight POST handlers to it.
 
 Two more tools exist that wrap nothing:
 `connection_status` (is this session authenticated — polled by the connect card)

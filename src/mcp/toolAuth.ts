@@ -29,6 +29,13 @@ export const AUTH_REQUIRED_TOOLS = new Set([
   "refine_frame",
   "check_generation",
   "save_frame",
+  "start_booth",
+  "refine_booth",
+  "create_booth",
+  // Read-only, but it calls the Studio and exists only as the first half of
+  // create_filter: a call without a token should start a sign-in, not answer
+  // "not connected".
+  "preview_filter",
 ]);
 
 /**

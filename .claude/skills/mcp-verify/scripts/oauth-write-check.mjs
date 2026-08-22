@@ -21,10 +21,12 @@
  *
  * ## This creates things
  *
- * On success it leaves a filter and a frame on the account that approves it.
- * That is the point — a write path that has never written is not verified —
- * but it means this is not a script to run idly. Everything it makes is named
- * so it is obvious in a dashboard list and safe to delete.
+ * On success it leaves a filter and a frame on the account that approves it —
+ * and, with `--booth`, a whole booth, live at its own link. That is the point
+ * — a write path that has never written is not verified — but it means this
+ * is not a script to run idly: the booth round spends one full generation,
+ * one redraw and three frame images of the account's allowance. Everything it
+ * makes is named so it is obvious in a dashboard list and safe to delete.
  *
  * The token is never printed and never written to disk, same rule as
  * bearer-check. It is short-lived and revocable, which is exactly why it is
@@ -34,9 +36,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { McpClient, payload, textOf } from "./mcp.mjs";
 
-const BASE = (process.argv[2] || "").replace(/\/$/, "");
-const STUDIO = (process.argv[3] || "https://dreamboothstudio.com").replace(/\/$/, "");
-if (!BASE) throw new Error("usage: node oauth-write-check.mjs <mcpBaseUrl> [studioUrl]");
+const ARGS = process.argv.slice(2);
+const FLAGS = new Set(ARGS.filter((a) => a.startsWith("--")));
+const [BASE_ARG, STUDIO_ARG] = ARGS.filter((a) => !a.startsWith("--"));
+const BASE = (BASE_ARG || "").replace(/\/$/, "");
+const STUDIO = (STUDIO_ARG || "https://dreamboothstudio.com").replace(/\/$/, "");
+if (!BASE) throw new Error("usage: node oauth-write-check.mjs <mcpBaseUrl> [studioUrl] [--booth]");
+/** The booth round creates a real booth and spends real allowance: opt in. */
+const WITH_BOOTH = FLAGS.has("--booth");
 
 const PORT = Number(process.env.OAUTH_CHECK_PORT || 8765);
 /**
@@ -143,8 +150,9 @@ const codePromise = new Promise((resolve, reject) => {
 });
 
 console.log("");
-console.log("Open this and approve. READ THE CONSENT SCREEN — it should list");
-console.log('creating filters and duplicating a booth under "It will be able to":');
+console.log("Open this and approve. READ THE CONSENT SCREEN — under \"It will be able to\"");
+console.log("it should say: create photo filters and frames, design and create a new booth,");
+console.log("and duplicate an existing booth:");
 console.log("");
 console.log(`   ${authUrl}`);
 console.log("");
@@ -225,11 +233,32 @@ for (const t of [
   "refine_frame",
   "check_generation",
   "save_frame",
+  "preview_filter",
+  "start_booth",
+  "refine_booth",
+  "create_booth",
 ]) {
   ok(names.includes(t), `${t} appears in tools/list`);
 }
 
 const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+
+// Preview first, the way an operator would: an image, and an honest list of
+// what the preview cannot show.
+const previewed = await call("preview_filter", {
+  adjustments: { contrast: 112, saturation: 88, sepia: 18, shadows: 10 },
+});
+const previewOut = payload(previewed?.result);
+ok(
+  !previewed?.result?.isError && String(previewOut?.previewUrl || "").startsWith("https://"),
+  "preview_filter returned an image URL",
+  previewed?.result?.isError ? textOf(previewed.result).slice(0, 100) : String(previewOut?.previewUrl).slice(0, 90)
+);
+ok(
+  Array.isArray(previewOut?.notPreviewed) && previewOut.notPreviewed.includes("shadows"),
+  "preview_filter names what it cannot show",
+  JSON.stringify(previewOut?.notPreviewed)
+);
 
 const filter = await call("create_filter", {
   name: `mcp-verify ${stamp}`,
@@ -319,12 +348,98 @@ if (chosen) {
   );
 }
 
+// ---- 5. the booth round (opt-in) ---------------------------------------------
+//
+// start → check → refine once → check → create → check. A real booth, live at
+// dreambooth.app/<slug>, on the approving account. Skipped without --booth.
+
+async function waitForJob(jobId, label, maxMs) {
+  console.log(`      waiting up to ${Math.round(maxMs / 60000)} minutes (${label})...`);
+  const until = Date.now() + maxMs;
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 10000));
+    const checked = payload((await call("check_generation", { jobId }))?.result);
+    if (checked?.progress) console.log(`      … ${checked.progress}`);
+    if (checked?.state && checked.state !== "running") return checked;
+  }
+  return null;
+}
+
+if (WITH_BOOTH) {
+  console.log("");
+  console.log("The booth round:");
+  console.log("");
+  const boothStamp = new Date().toISOString().replace(/\D/g, "").slice(2, 12);
+
+  const startedBooth = await call("start_booth", {
+    prompt: "a warm gold wedding photobooth for a garden reception in Bandung, soft florals, elegant serif type",
+    language: "en",
+  });
+  const startOut = payload(startedBooth?.result);
+  let draft = null;
+  if (startedBooth?.result?.isError || !startOut?.jobId) {
+    ok(false, "start_booth started", textOf(startedBooth?.result ?? {}).slice(0, 100));
+  } else {
+    ok(true, "start_booth started", `job=${startOut.jobId}`);
+    const designed = await waitForJob(startOut.jobId, "designing the booth", 6 * 60 * 1000);
+    draft = designed?.draft ?? null;
+    ok(
+      designed?.state === "done" && Boolean(draft?.draftId) && Boolean(draft?.welcomePortraitUrl),
+      "a booth draft was designed, with a welcome preview",
+      designed ? `state=${designed.state} ${draft?.draftId ?? designed.error ?? ""}`.slice(0, 110) : "still running"
+    );
+  }
+
+  if (draft) {
+    const refined = await call("refine_booth", {
+      draftId: draft.draftId,
+      what: "welcome",
+      orientation: "phone",
+      instruction: "warmer, bigger headline",
+    });
+    const refineOut = payload(refined?.result);
+    if (refined?.result?.isError || !refineOut?.jobId) {
+      ok(false, "refine_booth started", textOf(refined?.result ?? {}).slice(0, 100));
+    } else {
+      ok(true, "refine_booth started", `job=${refineOut.jobId}`);
+      const redrawn = await waitForJob(refineOut.jobId, "redrawing the welcome", 6 * 60 * 1000);
+      ok(
+        redrawn?.state === "done" && redrawn?.draft?.draftId === draft.draftId,
+        "the redraw landed on the same draft",
+        redrawn ? `state=${redrawn.state} regens left=${redrawn?.draft?.remainingRegens}`.slice(0, 110) : "still running"
+      );
+    }
+
+    const created = await call("create_booth", {
+      draftId: draft.draftId,
+      title: `mcp-verify ${stamp}`,
+      slug: `mcp-verify-${boothStamp}`,
+    });
+    const createOut = payload(created?.result);
+    if (created?.result?.isError || !createOut?.jobId) {
+      ok(false, "create_booth started", textOf(created?.result ?? {}).slice(0, 100));
+    } else {
+      ok(true, "create_booth started", `job=${createOut.jobId}`);
+      const booth = await waitForJob(createOut.jobId, "drawing frames and creating the booth", 8 * 60 * 1000);
+      ok(
+        booth?.state === "done" && Boolean(booth?.booth?.slug) && Boolean(booth?.booth?.boothUrl),
+        "the booth was actually created",
+        booth ? `state=${booth.state} ${booth?.booth?.boothUrl ?? booth.error ?? ""}`.slice(0, 110) : "still running"
+      );
+      if (booth?.booth?.boothUrl) {
+        console.log(`      booth: ${booth.booth.boothUrl}`);
+        console.log(`      dashboard: ${booth.booth.dashboardUrl}`);
+      }
+    }
+  }
+}
+
 console.log("");
 console.log("─".repeat(64));
 console.log(`${pass} passed, ${fail} failed`);
 if (!fail) {
   console.log("");
-  console.log("The write path works end to end over OAuth. Delete the two");
-  console.log(`"mcp-verify ${stamp}" items from the dashboard when you are done.`);
+  console.log("The write path works end to end over OAuth. Delete the");
+  console.log(`"mcp-verify ${stamp}" items (filter, frame${WITH_BOOTH ? ", booth" : ""}) from the dashboard when you are done.`);
 }
 process.exit(fail ? 1 : 0);
