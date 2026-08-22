@@ -198,15 +198,14 @@ That is the complete read set. Two more wrap a route that creates something:
 | `check_generation` | nothing — reads this process | Bearer |
 | `save_frame` | `POST /api/ai/frames/from-generation` | Bearer + `booths:write` |
 
-> **The four frame tools are off by default**, behind
-> `ENABLE_FRAME_GENERATION=1`. They are complete and tested against a fake
-> Studio, but the Studio routes they call are new and no real
-> start → refine → save round has been run against production yet. A listed
-> tool that always fails reads as a broken connector to a reviewer and a broken
-> account to an operator, so they are absent instead. Turn the flag on in the
-> same change that proves a round works (`oauth-write-check.mjs` in the
-> mcp-verify skill does exactly that), and restore the frame lines in
-> `docs/chatgpt-listing.md` at the same time.
+> **Deploy order matters for the frame tools.** They are listed
+> unconditionally — there is no flag — and they call Studio routes that are
+> new: `/api/ai/frames/start`, `/api/ai/frames/from-generation`, and
+> `/api/ai/threads/{id}/messages` opened to OAuth. Deploy that Studio change
+> before a build of this server that carries the tools, or `start_frame`
+> answers "Nothing found" until it lands. `oauth-write-check.mjs` in the
+> mcp-verify skill runs a real start → refine → save round; run it once after
+> both are live.
 
 Frame generation is the one flow here that is neither a single call nor a
 single answer. An image-model round trip runs 30–90 seconds against a

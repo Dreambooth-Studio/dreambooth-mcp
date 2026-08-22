@@ -11,7 +11,7 @@ import { buildRefineFrame } from "../src/tools/refineFrame.js";
 import { buildCheckGeneration } from "../src/tools/checkGeneration.js";
 import { buildSaveFrame } from "../src/tools/saveFrame.js";
 import { GENERATION_TIMEOUT_MS } from "../src/tools/frameGeneration.js";
-import { AUTH_REQUIRED_TOOLS, FLAGGED_TOOLS, requiresAuth } from "../src/mcp/toolAuth.js";
+import { AUTH_REQUIRED_TOOLS, requiresAuth } from "../src/mcp/toolAuth.js";
 import { ownerKeyFor } from "../src/jobs/store.js";
 import type { Config } from "../src/config.js";
 import type { StudioClient } from "../src/studio/client.js";
@@ -33,12 +33,7 @@ const CONFIG = {
   requestTimeoutMs: 1000,
   allowedHosts: [],
   diagnostics: false,
-  // These tests are about the tools existing, so they run with the flag ON.
-  // The block at the bottom of this file covers the default, which is OFF.
-  frameGeneration: true,
 } as unknown as Config;
-
-const CONFIG_FLAG_OFF = { ...CONFIG, frameGeneration: false } as unknown as Config;
 
 const FRAME_TOOLS = ["start_frame", "refine_frame", "check_generation", "save_frame"];
 
@@ -130,7 +125,8 @@ test("all four are listed as needing auth, so a call without one starts a sign-i
   // no OAuth flow.
   for (const name of FRAME_TOOLS) {
     assert.ok(AUTH_REQUIRED_TOOLS.has(name), name);
-    assert.ok(FLAGGED_TOOLS.has(name), `${name} is flagged`);
+    const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
+    assert.equal(requiresAuth(call), true, `${name} triggers the sign-in 401`);
   }
 });
 
@@ -522,53 +518,4 @@ test("every frame-tool result satisfies the published output schema", async () =
     await client.close();
     await server.close();
   }
-});
-
-/* ------------------------------------------------------------- the flag --- */
-
-/**
- * With ENABLE_FRAME_GENERATION off, the frame tools must not exist anywhere a
- * client can see them.
- *
- * This is a claim gate, not a feature toggle. The tools are complete and
- * tested here against a fake Studio, and until a real start → refine → save
- * round has run against production a listed tool that might always fail reads
- * as a broken connector to a directory reviewer and a broken account to an
- * operator. The default has to be provably off, or "we hid it" is just an
- * intention.
- */
-test("the flag hides the frame tools, and only those", async () => {
-  const hidden = await toolNames(true, CONFIG_FLAG_OFF);
-
-  for (const name of FRAME_TOOLS) assert.ok(!hidden.includes(name), name);
-
-  // The other write tools are unaffected — this must not be a switch that
-  // quietly turns the whole write capability off.
-  assert.ok(hidden.includes("create_filter"));
-  assert.ok(hidden.includes("duplicate_project"));
-  // And the reads, obviously.
-  assert.ok(hidden.includes("list_projects"));
-  assert.ok(hidden.includes("search_docs"));
-});
-
-test("a hidden tool is not answered with a sign-in prompt", () => {
-  for (const name of FRAME_TOOLS) {
-    const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
-
-    // A 401 is a promise that signing in will help. For a tool that is not
-    // registered it would not: the client authenticates, calls again, and is
-    // told the tool is unknown — a sign-in loop with nothing at the end of it.
-    assert.equal(requiresAuth(call, { frameGeneration: false }), false, name);
-    assert.equal(requiresAuth(call, { frameGeneration: true }), true, name);
-
-    // Omitting the option must not accidentally re-enable the prompt: the
-    // default has to match the config default, which is off.
-    assert.equal(requiresAuth(call), false, name);
-  }
-
-  // Unflagged tools are untouched by any of this.
-  const filter = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_filter" } };
-  assert.equal(requiresAuth(filter), true);
-  assert.equal(requiresAuth(filter, { frameGeneration: false }), true);
-  assert.ok(AUTH_REQUIRED_TOOLS.has("start_frame"), "still listed for when the flag is on");
 });

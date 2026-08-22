@@ -369,62 +369,63 @@ export function createServer(
      * The preview card belongs on `check_generation`, the only tool that can
      * show an image; the "frame created" card on `save_frame`.
      *
-     * Behind `ENABLE_FRAME_GENERATION`, and off by default, until a real
-     * start → refine → save round has been run against production. See
-     * `Config.frameGeneration`.
+     * Listed unconditionally, like every other tool here. There used to be a
+     * flag, from when these wrapped an Imagen route that could never succeed;
+     * a switch whose only job is "hide a tool that cannot work" is not worth
+     * an environment variable once the tool can. What remains is deploy
+     * order — the Studio routes these call must be live first — and that is
+     * a note in the README, not a runtime setting.
      */
-    if (config.frameGeneration) {
-      registerWidget(server, {
-        uri: GENERATION_WIDGET_URI,
-        name: "generation-preview-card",
-        title: "Frame preview",
-        html: generationWidgetHtml,
-        description:
-          "A card showing the generated frame preview — or that it is still generating, or why it failed. A preview is not a saved frame.",
-        // The one card that loads an image, so the one card whose CSP names
-        // an origin. See GENERATION_IMAGE_ORIGINS for why these.
-        csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
-      });
+    registerWidget(server, {
+      uri: GENERATION_WIDGET_URI,
+      name: "generation-preview-card",
+      title: "Frame preview",
+      html: generationWidgetHtml,
+      description:
+        "A card showing the generated frame preview — or that it is still generating, or why it failed. A preview is not a saved frame.",
+      // The one card that loads an image, so the one card whose CSP names
+      // an origin. See GENERATION_IMAGE_ORIGINS for why these.
+      csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
+    });
 
-      const startFrame = buildStartFrame(studio);
-      server.registerTool(
-        startFrame.name,
-        { ...startFrame.config, annotations: CREATES },
-        safe(startFrame.handler),
-      );
+    const startFrame = buildStartFrame(studio);
+    server.registerTool(
+      startFrame.name,
+      { ...startFrame.config, annotations: CREATES },
+      safe(startFrame.handler),
+    );
 
-      const refineFrame = buildRefineFrame(studio);
-      server.registerTool(
-        refineFrame.name,
-        { ...refineFrame.config, annotations: CREATES },
-        safe(refineFrame.handler),
-      );
+    const refineFrame = buildRefineFrame(studio);
+    server.registerTool(
+      refineFrame.name,
+      { ...refineFrame.config, annotations: CREATES },
+      safe(refineFrame.handler),
+    );
 
-      const checkGeneration = buildCheckGeneration(studio, config);
-      server.registerTool(
-        checkGeneration.name,
-        withWidget(
-          // Reads a status and creates nothing. Saying so is what lets a client
-          // poll without asking the operator each time, which is the only way
-          // polling is tolerable.
-          { ...checkGeneration.config, annotations: READ_ONLY },
-          GENERATION_WIDGET_URI,
-          { invoking: "Mengecek…", invoked: "Pratinjau frame" },
-        ),
-        safe(checkGeneration.handler),
-      );
+    const checkGeneration = buildCheckGeneration(studio, config);
+    server.registerTool(
+      checkGeneration.name,
+      withWidget(
+        // Reads a status and creates nothing. Saying so is what lets a client
+        // poll without asking the operator each time, which is the only way
+        // polling is tolerable.
+        { ...checkGeneration.config, annotations: READ_ONLY },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengecek…", invoked: "Pratinjau frame" },
+      ),
+      safe(checkGeneration.handler),
+    );
 
-      const saveFrame = buildSaveFrame(studio, config);
-      server.registerTool(
-        saveFrame.name,
-        withWidget(
-          { ...saveFrame.config, annotations: CREATES },
-          WRITE_RESULT_WIDGET_URI,
-          { invoking: "Menyimpan frame…", invoked: "Frame disimpan" },
-        ),
-        safe(saveFrame.handler),
-      );
-    }
+    const saveFrame = buildSaveFrame(studio, config);
+    server.registerTool(
+      saveFrame.name,
+      withWidget(
+        { ...saveFrame.config, annotations: CREATES },
+        WRITE_RESULT_WIDGET_URI,
+        { invoking: "Menyimpan frame…", invoked: "Frame disimpan" },
+      ),
+      safe(saveFrame.handler),
+    );
   }
 
   return server;
