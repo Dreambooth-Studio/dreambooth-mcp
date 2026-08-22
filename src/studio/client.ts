@@ -58,7 +58,11 @@ export class StudioClient {
     return ownerKeyFor(this.requireToken());
   }
 
-  async get<T>(path: string, query: Record<string, string | undefined> = {}): Promise<T> {
+  async get<T>(
+    path: string,
+    query: Record<string, string | undefined> = {},
+    options: { timeoutMs?: number } = {}
+  ): Promise<T> {
     const token = this.requireToken();
     const url = new URL(this.config.apiUrl + path);
     for (const [key, value] of Object.entries(query)) {
@@ -66,7 +70,12 @@ export class StudioClient {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+    // Same rule as `post`: the config's ceiling unless the caller has a reason
+    // — a filter preview renders an image before it answers.
+    const timer = setTimeout(
+      () => controller.abort(),
+      options.timeoutMs ?? this.config.requestTimeoutMs
+    );
 
     let res: Response;
     try {
@@ -99,9 +108,11 @@ export class StudioClient {
    * Creates something. The only method here that changes anything.
    *
    * The Studio routes that accept it — POST /api/filters, the ?duplicate
-   * branch of POST /api/projects, and the frame routes (`/api/ai/frames/start`,
-   * `/api/ai/threads/{id}/messages`, `/api/ai/frames/from-generation`) — all
-   * require an OAuth access token carrying `booths:write`. A read-scoped
+   * branch of POST /api/projects, the frame routes (`/api/ai/frames/start`,
+   * `/api/ai/threads/{id}/messages`, `/api/ai/frames/from-generation`) and the
+   * booth routes (`/api/onboarding/generate`, `/api/onboarding/draft-frames`,
+   * `/api/projects/onboarding`) — all require an OAuth access token carrying
+   * `booths:write`. A read-scoped
    * token, or the device-flow session token, is refused by the Studio with a
    * 403 whose message is written to be relayed verbatim; see `studioErrorFor`.
    *

@@ -1,20 +1,22 @@
 import { brandMark, widgetDocument } from "./shell.js";
 
 /**
- * The card every write tool renders into. One widget, not one per tool.
+ * The card `duplicate_project` renders into.
  *
  * It exists to prove what just happened, and that is the whole job: the tool
  * has already written by the time a widget can be rendered, so there is nothing
  * here to confirm, cancel, poll or re-query. No timer, no `callTool`, no
- * `setWidgetState` — two states and a link.
+ * `setWidgetState` — one state and a link.
+ *
+ * Everything generated — frames, booths, filters and their previews — renders
+ * in the generation card instead (src/ui/generationResult.ts), because those
+ * show images from the Studio's storage and therefore name an origin in their
+ * CSP. This card draws everything inline and names none, and that emptiness
+ * is what makes it impossible for it to talk to the network at all.
  *
  * There is deliberately no "undo" button. Undoing means PUT or DELETE, which
  * would widen the connector's scope from "create" to "change and delete" for
  * one button. Undo lives in the dashboard, and the link goes there.
- *
- * Nothing here is a form. The operator described what they wanted in their own
- * sentence and the model turned it into arguments; a form would be asking them
- * to type it a second time. See docs/write-tools-plan.md §5.
  */
 
 export const WRITE_RESULT_WIDGET_URI = "ui://widget/write-result.html";
@@ -37,120 +39,24 @@ const SCRIPT = `
 
   var COPY = {
     id: {
-      filterMade: "Filter dibuat",
-      frameMade: "Frame dibuat",
-      generating: "Sedang dibuat…",
-      photos: "foto",
-      privateItem: "hanya akun ini",
       boothMade: "Booth diduplikat",
       open: "Buka di dashboard",
       failed: "Tidak jadi dibuat",
-      copiedFrom: "Disalin dari",
-      publicFilter: "bisa dipakai booth mana pun",
-      partial: "Pratinjau tidak memuat penajaman, reduksi noise, vignette dan grain.",
-      noPreview: "Filter ini memakai efek yang tidak bisa dipratinjau di sini."
+      copiedFrom: "Disalin dari"
     },
     en: {
-      filterMade: "Filter created",
-      frameMade: "Frame created",
-      generating: "Still generating…",
-      photos: "photos",
-      privateItem: "private to this account",
       boothMade: "Booth duplicated",
       open: "Open in dashboard",
       failed: "Nothing was created",
-      copiedFrom: "Copied from",
-      publicFilter: "available to any booth",
-      partial: "The preview leaves out sharpening, noise reduction, vignette and grain.",
-      noPreview: "This filter uses effects that cannot be previewed here."
+      copiedFrom: "Copied from"
     },
     es: {
-      filterMade: "Filtro creado",
-      frameMade: "Marco creado",
-      generating: "Generando…",
-      photos: "fotos",
-      privateItem: "privado de esta cuenta",
       boothMade: "Cabina duplicada",
       open: "Abrir en el panel",
       failed: "No se creo nada",
-      copiedFrom: "Copiado de",
-      publicFilter: "disponible para cualquier cabina",
-      partial: "La vista previa omite nitidez, reduccion de ruido, vineta y grano.",
-      noPreview: "Este filtro usa efectos que no se pueden previsualizar aqui."
+      copiedFrom: "Copiado de"
     }
   };
-
-  /**
-   * Adjustment names the operator would recognise, and the ranges they live in.
-   *
-   * Copied from adjustmentRanges in the Studio's
-   * app/[locale]/dashboard/filters/[id]/page.tsx. The 'mid' value is what
-   * counts as untouched: 100 for the multiplicative CSS filters, 0 for the
-   * additive ones. Without it the summary line would proudly report
-   * "Contrast 100" on a filter where contrast was never changed.
-   */
-  var RANGES = {
-    contrast: { mid: 100, label: { id: "Kontras", en: "Contrast", es: "Contraste" } },
-    brightness: { mid: 100, label: { id: "Kecerahan", en: "Brightness", es: "Brillo" } },
-    saturation: { mid: 100, label: { id: "Saturasi", en: "Saturation", es: "Saturacion" } },
-    temperature: { mid: 0, label: { id: "Suhu", en: "Temperature", es: "Temperatura" } },
-    exposure: { mid: 0, label: { id: "Eksposur", en: "Exposure", es: "Exposicion" } },
-    shadows: { mid: 0, label: { id: "Bayangan", en: "Shadows", es: "Sombras" } },
-    highlights: { mid: 0, label: { id: "Sorotan", en: "Highlights", es: "Luces" } },
-    vignette: { mid: 0, label: { id: "Vignette", en: "Vignette", es: "Vineta" } },
-    grain: { mid: 0, label: { id: "Grain", en: "Grain", es: "Grano" } },
-    sepia: { mid: 0, label: { id: "Sepia", en: "Sepia", es: "Sepia" } },
-    grayscale: { mid: 0, label: { id: "Hitam putih", en: "Grayscale", es: "Escala de grises" } },
-    blur: { mid: 0, label: { id: "Blur", en: "Blur", es: "Desenfoque" } },
-    clarity: { mid: 0, label: { id: "Kejernihan", en: "Clarity", es: "Claridad" } },
-    vibrance: { mid: 0, label: { id: "Vibrance", en: "Vibrance", es: "Intensidad" } },
-    tint: { mid: 0, label: { id: "Tint", en: "Tint", es: "Matiz" } }
-  };
-
-  /**
-   * The eight adjustments CSS can actually reproduce.
-   *
-   * Everything else in the Filter model — sharpening, noise reduction, clarity,
-   * dehaze, texture, vignette, grain, and every LUT — is applied by the booth's
-   * own renderer and has no CSS equivalent. The card says so rather than
-   * quietly showing a swatch that is missing half the filter.
-   */
-  var CSS_FILTERS = {
-    brightness: function (v) { return "brightness(" + (v / 100) + ")"; },
-    contrast: function (v) { return "contrast(" + (v / 100) + ")"; },
-    saturation: function (v) { return "saturate(" + (v / 100) + ")"; },
-    sepia: function (v) { return "sepia(" + (v / 100) + ")"; },
-    grayscale: function (v) { return "grayscale(" + (v / 100) + ")"; },
-    invert: function (v) { return "invert(" + (v / 100) + ")"; },
-    hueRotate: function (v) { return "hue-rotate(" + v + "deg)"; },
-    blur: function (v) { return "blur(" + v + "px)"; }
-  };
-
-  /**
-   * A neutral subject for the swatch: warm skin tones into a cool background,
-   * with a grey ramp underneath.
-   *
-   * Drawn rather than photographed for the same reason the logo is (see
-   * shell.ts): an <img> would need a resourceDomains entry in the CSP, and an
-   * empty CSP is what makes it impossible for these cards to leak a token. The
-   * grey ramp is not decoration — brightness and contrast are nearly invisible
-   * on a saturated gradient alone, and a swatch that fails to show the
-   * adjustment it illustrates is worse than no swatch.
-   */
-  var SWATCH =
-    '<svg viewBox="0 0 72 48" width="72" height="48" aria-hidden="true">' +
-    '<defs>' +
-    '<linearGradient id="dbSwatch" x1="0" y1="0" x2="72" y2="40" gradientUnits="userSpaceOnUse">' +
-    '<stop offset="0" stop-color="#F6C9A8"/><stop offset=".45" stop-color="#E08A6B"/>' +
-    '<stop offset=".75" stop-color="#7B93C4"/><stop offset="1" stop-color="#2E3F63"/>' +
-    '</linearGradient>' +
-    '<linearGradient id="dbRamp" x1="0" y1="0" x2="72" y2="0" gradientUnits="userSpaceOnUse">' +
-    '<stop offset="0" stop-color="#111"/><stop offset=".5" stop-color="#888"/><stop offset="1" stop-color="#fff"/>' +
-    '</linearGradient>' +
-    '</defs>' +
-    '<rect width="72" height="38" rx="4" fill="url(#dbSwatch)"/>' +
-    '<rect y="40" width="72" height="8" rx="2" fill="url(#dbRamp)"/>' +
-    '</svg>';
 
   var t = db.t(COPY);
 
@@ -158,48 +64,6 @@ const SCRIPT = `
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
-  }
-
-  function num(value) {
-    return typeof value === "number" && isFinite(value) ? value : null;
-  }
-
-  /** "Kontras +12 · Suhu -8", most-changed first, four at most. */
-  function summarise(adjustments) {
-    var moved = [];
-    for (var key in RANGES) {
-      if (!Object.prototype.hasOwnProperty.call(adjustments || {}, key)) continue;
-      var value = num(adjustments[key]);
-      if (value === null) continue;
-      var delta = value - RANGES[key].mid;
-      if (delta === 0) continue;
-      moved.push({
-        label: RANGES[key].label[db.locale] || RANGES[key].label.id,
-        delta: delta
-      });
-    }
-    moved.sort(function (a, b) { return Math.abs(b.delta) - Math.abs(a.delta); });
-    return moved.slice(0, 4).map(function (m) {
-      return m.label + " " + (m.delta > 0 ? "+" : "") + Math.round(m.delta * 10) / 10;
-    }).join(" · ");
-  }
-
-  /** The CSS filter string, plus whether anything had to be left out of it. */
-  function preview(adjustments) {
-    var parts = [];
-    var omitted = false;
-    for (var key in (adjustments || {})) {
-      if (!Object.prototype.hasOwnProperty.call(adjustments, key)) continue;
-      var value = num(adjustments[key]);
-      if (value === null) continue;
-      if (CSS_FILTERS[key]) {
-        var neutral = key === "brightness" || key === "contrast" || key === "saturation" ? 100 : 0;
-        if (value !== neutral) parts.push(CSS_FILTERS[key](value));
-      } else if (RANGES[key] ? value !== RANGES[key].mid : value !== 0) {
-        omitted = true;
-      }
-    }
-    return { css: parts.join(" "), omitted: omitted, empty: parts.length === 0 };
   }
 
   function link(url) {
@@ -212,40 +76,14 @@ const SCRIPT = `
     '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">' +
     '<path d="M2 8.5l4 4 8-9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  function renderFilter(out) {
-    var view = preview(out.adjustments);
-    var facts = summarise(out.adjustments);
-    if (out.isPublic) facts = facts ? facts + " · " + t.publicFilter : t.publicFilter;
-
-    var swatch = view.empty
-      ? ''
-      : '<div style="margin-top:.75rem"><span style="display:inline-block;line-height:0;filter:' +
-        esc(view.css) + '">' + SWATCH + '</span></div>';
-
-    var note = view.empty ? t.noPreview : (view.omitted ? t.partial : "");
-
-    el.innerHTML =
-      '<div class="db-status db-status--ok">' + CHECK + '<span>' + esc(t.filterMade) + '</span></div>' +
-      '<p class="db-title" style="margin-top:.5rem">' + esc(out.name) + '</p>' +
-      (facts ? '<p class="db-sub">' + esc(facts) + '</p>' : '') +
-      swatch +
-      (note ? '<p class="db-note">' + esc(note) + '</p>' : '') +
-      link(out.dashboardUrl);
-    db.fit();
-  }
-
   function renderBooth(out) {
     /*
      * No active/inactive line, deliberately.
      *
      * The card used to end with one, driven by isActive. That field is a
      * soft-delete flag defaulting to true, not a live/paused switch, so the
-     * label claimed a distinction the product does not have: a duplicate
-     * always renders whichever word it maps to, regardless of anything the
-     * operator can see or change. "belum aktif" was wrong, and "aktif" would
-     * be true and meaningless.
-     *
-     * What is worth saying is that it is a copy, and of what. Both are below.
+     * label claimed a distinction the product does not have. What is worth
+     * saying is that it is a copy, and of what. Both are below.
      *
      * No backticks in this comment. It lives inside the template literal that
      * is this whole SCRIPT string, and one backtick ends the string.
@@ -263,35 +101,6 @@ const SCRIPT = `
     db.fit();
   }
 
-  function renderFrame(out) {
-    // Running is not a success and must not be drawn as one: at this point
-    // nothing exists, and a card with a checkmark is a claim that it does.
-    if (out.state === "running") {
-      el.innerHTML =
-        '<div class="db-status"><span>' + esc(t.generating) + '</span></div>' +
-        '<p class="db-title" style="margin-top:.5rem">' + esc(out.what || "") + '</p>' +
-        (out.note ? '<p class="db-sub">' + esc(out.note) + '</p>' : '');
-      db.fit();
-      return;
-    }
-    if (out.state !== "done") {
-      renderError(out.error || "");
-      return;
-    }
-
-    var facts = [];
-    if (out.canvasWidth && out.canvasHeight) facts.push(out.canvasWidth + "x" + out.canvasHeight);
-    if (out.placeholderCount) facts.push(out.placeholderCount + " " + t.photos);
-    if (!out.isPublic) facts.push(t.privateItem);
-
-    el.innerHTML =
-      '<div class="db-status db-status--ok">' + CHECK + '<span>' + esc(t.frameMade) + '</span></div>' +
-      '<p class="db-title" style="margin-top:.5rem">' + esc(out.name || out.what || "") + '</p>' +
-      (facts.length ? '<p class="db-sub">' + esc(facts.join(" · ")) + '</p>' : '') +
-      link(out.dashboardUrl);
-    db.fit();
-  }
-
   function renderError(message) {
     // No dashboard link on this branch: there is nothing there to look at, and
     // a link on a failure reads as "it half worked".
@@ -303,14 +112,8 @@ const SCRIPT = `
 
   function render() {
     var out = db.toolOutput();
-    if (!out || !out.kind) {
-      renderError(out && out.error ? out.error : "");
-      return;
-    }
-    if (out.kind === "filter") { renderFilter(out); return; }
-    if (out.kind === "booth") { renderBooth(out); return; }
-    if (out.kind === "frame") { renderFrame(out); return; }
-    renderError("");
+    if (out && out.kind === "booth") { renderBooth(out); return; }
+    renderError(out && out.error ? out.error : "");
   }
 
   // Re-resolve the copy, not just re-render: t was captured at start-up, so a

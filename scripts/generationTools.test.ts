@@ -154,6 +154,17 @@ test("start, refine and save create; check_generation does not", async () => {
   const check = listed.tools.find((t) => t.name === "check_generation");
   assert.equal(check?.annotations?.readOnlyHint, true);
 
+  // Every generated thing has a card from the moment it is asked for: the
+  // start and refine handles render the live generation card, the saved
+  // frame renders there too, and check_generation is callable from inside
+  // that card so it can update itself.
+  const meta = (name: string) =>
+    (listed.tools.find((t) => t.name === name) as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {};
+  for (const name of ["start_frame", "refine_frame", "save_frame", "check_generation"]) {
+    assert.equal(meta(name)["openai/outputTemplate"], "ui://widget/generation.html", name);
+  }
+  assert.equal(meta("check_generation")["openai/widgetAccessible"], true, "the live card polls it");
+
   // The preview card is the only widget allowed to name an image origin; the
   // others stay closed to the network entirely.
   const resources = await (async () => {
@@ -269,7 +280,7 @@ test("check_generation reports running, then the preview with what the next step
   const running = await check.handler({ jobId: started.jobId });
   assert.equal(running.state, "running");
   assert.equal(running.imageUrl, undefined);
-  assert.match(String(running.note), /nothing has been generated yet/i);
+  assert.match(String(running.note), /nothing exists yet/i);
 
   release(generated("g9"));
   await drained();
@@ -364,8 +375,8 @@ test("an unknown job id points at the thread and the dashboard instead of claimi
   // operator nothing was generated when something may well have been.
   const answer = await check.handler({ jobId: "not-a-real-job" });
   assert.equal(answer.state, "unknown");
-  assert.match(String(answer.error), /refine_frame continues the same thread/i);
-  assert.match(String(answer.error), /check the dashboard/i);
+  assert.match(String(answer.error), /threadId still works with refine_frame/i);
+  assert.match(String(answer.error), /dashboard/i);
   assert.ok(answer.dashboardUrl);
 });
 

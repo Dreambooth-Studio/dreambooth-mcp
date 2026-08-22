@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { JobStore, JobLimitError, ownerKeyFor } from "../src/jobs/store.js";
+import { JobStore, JobLimitError, ownerKeyFor, type JobContext } from "../src/jobs/store.js";
 
 /**
  * The store that lets a two-minute generation live behind a fifteen-second
@@ -168,4 +168,77 @@ test("finishing a job frees a slot", async () => {
 
   assert.doesNotThrow(() => store.start(ALICE, "now there is room", async () => "x"));
   for (const d of held) d.resolve("done");
+});
+
+/* ------------------------------------------------ kinds, ceilings, progress --- */
+
+test("a job carries its kind and ref, and the defaults are what frames always had", () => {
+  const store = new JobStore();
+  const plain = store.start(ALICE, "a frame", () => new Promise(() => {}));
+  assert.equal(plain.kind, "generation");
+  assert.equal(plain.ref, undefined);
+
+  const booth = store.start(ALICE, "a booth", () => new Promise(() => {}), {
+    kind: "booth",
+    ref: "dft_123",
+  });
+  assert.equal(booth.kind, "booth");
+  assert.equal(booth.ref, "dft_123");
+  // The public view never leaks the ceiling; it is the store's business.
+  assert.equal("maxRuntimeMs" in (booth as unknown as Record<string, unknown>), false);
+});
+
+test("a job's own ceiling decides when the sweep presumes it dead", async () => {
+  const store = new JobStore();
+  const realNow = Date.now;
+  try {
+    let now = 1_000_000;
+    Date.now = () => now;
+
+    const quick = store.start(ALICE, "quick", () => new Promise(() => {}), { maxRuntimeMs: 1_000 });
+    const slow = store.start(ALICE, "slow", () => new Promise(() => {}), {
+      kind: "booth",
+      maxRuntimeMs: 10_000,
+    });
+
+    now += 2_000;
+    assert.equal(store.get(ALICE, quick.id)?.state, "failed", "past its own ceiling");
+    assert.equal(store.get(ALICE, slow.id)?.state, "running", "well inside its own");
+    assert.match(String(store.get(ALICE, quick.id)?.error?.message), /generation stopped reporting/);
+
+    now += 9_000;
+    const sweptBooth = store.get(ALICE, slow.id);
+    assert.equal(sweptBooth?.state, "failed");
+    // The sentence names what to check for a booth, not "the dashboard".
+    assert.match(String(sweptBooth?.error?.message), /list_projects/);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("running work can say where it is, and a finished job stops listening", async () => {
+  const store = new JobStore();
+  const work = deferred<string>();
+  const seen: { ctx?: JobContext } = {};
+
+  const job = store.start(ALICE, "a booth", (ctx) => {
+    seen.ctx = ctx;
+    return work.promise;
+  });
+  assert.ok(seen.ctx, "the work is handed a context");
+  assert.equal(seen.ctx.jobId, job.id);
+
+  seen.ctx.progress("  drawing the welcome screen for phones  ");
+  assert.equal(store.get(ALICE, job.id)?.progress, "drawing the welcome screen for phones");
+  assert.equal(store.list(ALICE)[0]?.progress, "drawing the welcome screen for phones");
+
+  // Capped, because a poll relays it and a card draws it.
+  seen.ctx.progress("x".repeat(500));
+  assert.equal(store.get(ALICE, job.id)?.progress?.length, 140);
+
+  work.resolve("done");
+  await settled();
+  const before = store.get(ALICE, job.id)?.progress;
+  seen.ctx.progress("a late write from a background loop");
+  assert.equal(store.get(ALICE, job.id)?.progress, before, "ignored once finished");
 });

@@ -197,15 +197,23 @@ That is the complete read set. Two more wrap a route that creates something:
 | `refine_frame` | `POST /api/ai/threads/{id}/messages` | Bearer + `booths:write` |
 | `check_generation` | nothing — reads this process | Bearer |
 | `save_frame` | `POST /api/ai/frames/from-generation` | Bearer + `booths:write` |
+| `preview_filter` | `GET /api/filters/preview` | Bearer (read is enough) |
+| `start_booth` | `POST /api/onboarding/generate` | Bearer + `booths:write` |
+| `refine_booth` | `POST /api/onboarding/generate` (regen, or a rebuild) | Bearer + `booths:write` |
+| `create_booth` | `GET by-slug?checkOnly` → `POST /api/onboarding/draft-frames` → `GET /api/onboarding/frames` + `/catalog` (+ `/api/ai-effects/catalog`) → `POST /api/projects/onboarding` → `GET by-slug` | Bearer + `booths:write` |
 
-> **Deploy order matters for the frame tools.** They are listed
+> **Deploy order matters for the frame and booth tools.** They are listed
 > unconditionally — there is no flag — and they call Studio routes that are
-> new: `/api/ai/frames/start`, `/api/ai/frames/from-generation`, and
-> `/api/ai/threads/{id}/messages` opened to OAuth. Deploy that Studio change
-> before a build of this server that carries the tools, or `start_frame`
-> answers "Nothing found" until it lands. `oauth-write-check.mjs` in the
-> mcp-verify skill runs a real start → refine → save round; run it once after
-> both are live.
+> new or newly opened to OAuth: `/api/ai/frames/start`,
+> `/api/ai/frames/from-generation`, `/api/ai/threads/{id}/messages`,
+> `/api/onboarding/generate`, `/api/onboarding/draft-frames`,
+> `/api/projects/onboarding`, `/api/filters/preview`. Deploy that Studio change
+> before a build of this server that carries the tools, or the tools answer
+> with a sentence saying the Studio is not updated yet. Booth generation also
+> needs the Studio's `digital_mode` feature to be live (it is the /new pipeline;
+> when dormant, the booth tools say so). `oauth-write-check.mjs` in the
+> mcp-verify skill runs a real round — add `--booth` for the booth one — run it
+> once after both are live.
 
 Frame generation is the one flow here that is neither a single call nor a
 single answer. An image-model round trip runs 30–90 seconds against a
@@ -222,6 +230,27 @@ generation the operator chose into a frame in their list. Until then
 card all say so rather than leaving a model to guess. Every generation spends
 part of the account's free daily allowance, which is why the descriptions tell
 the model never to iterate on its own initiative.
+
+**Booths follow the same shape**, through the `/new` onboarding pipeline — the
+Studio designs a whole booth from a sentence (spec, welcome screens for phone
+and laptop, in-booth background) and creates it. `start_booth` makes a DRAFT
+(a `draftId`, 60–120 s, a background job); `refine_booth` redraws the welcome
+screen or the in-booth background from an instruction, or rebuilds the whole
+draft from a new description; `create_booth` is the only step that makes a
+booth — it checks the link name first, draws the booth's own three frames,
+picks three starter frames and the Studio's default filter the way /new does,
+and creates the booth with the draft's design, theme and capture mode. The
+draft id is a plain value the model keeps, so a conversation outlives this
+process; drafts last seven days in the Studio. Quotas are the Studio's: 3 full
+generations and 5 redraws per draft, 10 drafts an hour per account. There is
+no spec-patch path — title, headline, colours change only through a redraw or
+a rebuild; title and link name are chosen at create time.
+
+**Filters** are previewed before they exist: `preview_filter` asks the Studio
+to bake its sample photo (or the operator's own preview photo) through the
+booth's real filter pipeline and returns a URL; `create_filter` saves the same
+adjustments. The preview shows 13 of the 31 adjustments and says which it
+cannot — the booth applies all of them.
 
 Jobs live in this process, keyed by a hash of the bearer that started them —
 never the bearer itself, which would mean holding operator credentials for as
@@ -247,7 +276,7 @@ the other one. The Studio enforces the same rule independently — see
 for why the gate here cannot check the scope itself.
 
 Nothing edits, nothing deletes, and nothing touches money. There is no `put` or
-`delete` on `StudioClient`, and the Studio opened exactly five POST handlers to it.
+`delete` on `StudioClient`, and the Studio opened exactly eight POST handlers to it.
 
 Two more tools exist that wrap nothing:
 `connection_status` (is this session authenticated — polled by the connect card)
@@ -275,19 +304,34 @@ operator has finished approving — instead of a URL they have to copy. It is an
 MCP resource (`ui://widget/connect-account.html`) pointed at by `_meta` on the
 tool, per the Apps SDK.
 
-`create_filter` and `duplicate_project` share a second card,
-`ui://widget/write-result.html`. It renders the result and nothing else: what
-was created, a preview swatch for a filter, and a link to it in the dashboard.
-There is no confirmation card and no form — a widget only renders after the
-tool has already written, so confirming would need a second tool that writes
-nothing, and the host's own approval dialog is the real gate. There is no
-"undo" button either: undo means PUT or DELETE, which would widen the scope
-from "create" to "change and delete" for one button.
+`duplicate_project` renders a second card, `ui://widget/write-result.html`. It
+renders the result and nothing else: the copy's name, what it was copied from,
+and a link to it in the dashboard. There is no confirmation card and no form —
+a widget only renders after the tool has already written, so confirming would
+need a second tool that writes nothing, and the host's own approval dialog is
+the real gate. There is no "undo" button either: undo means PUT or DELETE,
+which would widen the scope from "create" to "change and delete" for one
+button. Its CSP names no origin at all, which is what makes it impossible for
+it to talk to the network.
 
-The swatch is an inline SVG with a CSS `filter` applied, so the empty CSP below
-still holds. It names the adjustments it cannot show — sharpening, noise
-reduction, vignette, grain and every LUT have no CSS equivalent, and a swatch
-that silently drops half a filter is worse than no swatch.
+**Everything generated renders in a third card**, `ui://widget/generation.html`
+— the one card whose CSP names an origin, because it shows images from the
+Studio's storage. From the moment a thing is asked for to the moment it
+exists:
+
+- `start_frame` / `refine_frame` / `start_booth` / `refine_booth` /
+  `create_booth` return while the work runs, and their card is **live**: a
+  skeleton of the thing being made (a strip with its photo windows, a phone
+  with a welcome screen) that polls `check_generation` from inside the iframe
+  every few seconds and redraws as the preview when the work is done — the
+  operator watches it appear. `check_generation` is widget-accessible for
+  exactly that; a host without `callTool` just leaves the card at "working".
+- `check_generation` shows the preview (frame image; booth draft with its
+  welcome screen and palette; created booth with its thumbnail and links).
+- `save_frame` shows the saved frame's thumbnail; `create_filter` shows the
+  created filter on the Studio's sample photo (the same render `preview_filter`
+  shows, fetched after the save — best-effort); `preview_filter` shows the
+  preview and names the adjustments it cannot show.
 
 Nothing about this changes other clients. Every tool result carries the payload
 twice: `structuredContent` for widgets, and the same object pretty-printed as

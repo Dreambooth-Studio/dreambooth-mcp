@@ -42,7 +42,11 @@ import { createHash, randomUUID } from "node:crypto";
 /** How long a finished job stays readable before it is swept. */
 const RETENTION_MS = 15 * 60 * 1000;
 
-/** How long a job may run before it is presumed dead. Studio maxDuration is 120s. */
+/**
+ * How long a job may run before it is presumed dead, when the caller says
+ * nothing. A frame generation's route declares maxDuration 120 s; booth jobs
+ * pass their own, longer ceiling (see src/tools/boothGeneration.ts).
+ */
 const MAX_RUNTIME_MS = 3 * 60 * 1000;
 
 /**
@@ -58,6 +62,30 @@ const MAX_IN_FLIGHT_PER_OWNER = 3;
 
 export type JobState = "running" | "done" | "failed";
 
+/**
+ * What a job is, for the tool that reports on it and the card that draws it.
+ *
+ *   generation    a frame — start_frame / refine_frame
+ *   booth-draft   a booth designed but not created — start_booth / refine_booth
+ *   booth         a booth created — create_booth
+ */
+export type JobKind = "generation" | "booth-draft" | "booth";
+
+/** What running work may do to its own record: say where it is. */
+export interface JobContext {
+  jobId: string;
+  progress: (text: string) => void;
+}
+
+export interface JobOptions {
+  /** Defaults to "generation", which is what every job was before booths. */
+  kind?: JobKind;
+  /** Per-job ceiling; defaults to MAX_RUNTIME_MS. */
+  maxRuntimeMs?: number;
+  /** What the job is about — a draft id — so a second job on it can be refused. */
+  ref?: string;
+}
+
 export interface JobFailure {
   message: string;
   status?: number;
@@ -65,13 +93,18 @@ export interface JobFailure {
 
 export interface Job<T = unknown> {
   id: string;
+  kind: JobKind;
   state: JobState;
   /** What the operator asked for, so a poll can answer without re-deriving it. */
   label: string;
+  /** The thing the job is about (a draft id), when it has one. */
+  ref?: string;
   startedAt: number;
   finishedAt?: number;
   result?: T;
   error?: JobFailure;
+  /** Where running work says it is; cleared of meaning once finished. */
+  progress?: string;
 }
 
 interface StoredJob<T> extends Job<T> {
@@ -85,6 +118,8 @@ interface StoredJob<T> extends Job<T> {
    * A counter cannot tie.
    */
   seq: number;
+  /** When this job is presumed dead; per job, because booths run longer than frames. */
+  maxRuntimeMs: number;
 }
 
 /**
@@ -124,7 +159,12 @@ export class JobStore {
    * a rejection cannot escape as an unhandled rejection and take the process
    * down while an operator is mid-conversation.
    */
-  start<T>(ownerKey: string, label: string, work: () => Promise<T>): Job<T> {
+  start<T>(
+    ownerKey: string,
+    label: string,
+    work: (ctx: JobContext) => Promise<T>,
+    options: JobOptions = {}
+  ): Job<T> {
     this.sweep();
 
     const inFlight = [...this.jobs.values()].filter(
@@ -143,13 +183,20 @@ export class JobStore {
       id: randomUUID(),
       ownerKey,
       seq: this.nextSeq++,
+      kind: options.kind ?? "generation",
+      ref: options.ref,
+      maxRuntimeMs: options.maxRuntimeMs ?? MAX_RUNTIME_MS,
       state: "running",
       label,
       startedAt: Date.now(),
     };
     this.jobs.set(job.id, job as unknown as StoredJob<unknown>);
 
-    void work().then(
+    const ctx: JobContext = {
+      jobId: job.id,
+      progress: (text) => this.progress(job.id, text),
+    };
+    void work(ctx).then(
       (result) => {
         job.state = "done";
         job.result = result;
@@ -195,6 +242,18 @@ export class JobStore {
   }
 
   /**
+   * Lets running work say where it is — "drawing the welcome screen for
+   * phones" — so a poll can relay something better than elapsed seconds.
+   * Ignored once the job has finished: a late write from a background loop
+   * must not decorate a final state.
+   */
+  progress(id: string, text: string): void {
+    const job = this.jobs.get(id);
+    if (!job || job.state !== "running") return;
+    job.progress = text.trim().slice(0, 140);
+  }
+
+  /**
    * Drops finished jobs past retention, and fails running ones past the
    * maximum runtime.
    *
@@ -208,14 +267,10 @@ export class JobStore {
    */
   private sweep(now = Date.now()): void {
     for (const [id, job] of this.jobs) {
-      if (job.state === "running" && now - job.startedAt > MAX_RUNTIME_MS) {
+      if (job.state === "running" && now - job.startedAt > job.maxRuntimeMs) {
         job.state = "failed";
         job.finishedAt = now;
-        job.error = {
-          message:
-            "This generation stopped reporting and may or may not have finished." +
-            " Check the dashboard before starting another.",
-        };
+        job.error = { message: swept(job.kind) };
         continue;
       }
       if (job.state !== "running" && now - (job.finishedAt ?? job.startedAt) > RETENTION_MS) {
@@ -232,8 +287,29 @@ export class JobStore {
 
 /** Everything except the fields that must never leave this module. */
 function publicView<T>(job: StoredJob<T>): Job<T> {
-  const { ownerKey: _ownerKey, seq: _seq, ...rest } = job;
+  const { ownerKey: _ownerKey, seq: _seq, maxRuntimeMs: _maxRuntimeMs, ...rest } = job;
   return { ...rest };
+}
+
+/** The sentence a job that ran past its ceiling is failed with. */
+function swept(kind: JobKind): string {
+  switch (kind) {
+    case "booth-draft":
+      return (
+        "This booth design stopped reporting and may or may not have finished." +
+        " Start again with start_booth — a draft made by the lost job cannot be retrieved from here."
+      );
+    case "booth":
+      return (
+        "This booth creation stopped reporting and may or may not have finished." +
+        " Check list_projects or the dashboard before creating again."
+      );
+    default:
+      return (
+        "This generation stopped reporting and may or may not have finished." +
+        " Check the dashboard before starting another."
+      );
+  }
 }
 
 /**

@@ -404,3 +404,13 @@ deployment sungguhan.
       diuji di sini** — sandbox memblokir `dreamboothstudio.com` di level
       proxy, jadi `search_docs` gagal 403 di kedua smoke, sama persis di commit
       sebelum perubahan ini.
+
+## Addendum — 2026-08-22: booths through the /new pipeline
+
+§4's refusal stands: `POST /api/projects` from a connector may duplicate and
+may not create from scratch, because a project config composed by a model is
+a booth that boots wrong on a table. What landed instead is different in kind.
+`create_booth` calls `POST /api/projects/onboarding` with a `draftId`: the
+Studio builds the whole config from its OWN AI draft — welcome design, theme,
+background, thumbnail, the drawn frames — and the model supplies a title, a
+link name and picks from the catalogue. No config crosses the connector.

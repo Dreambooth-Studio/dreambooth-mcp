@@ -48,7 +48,7 @@ it, none of them factual:
 It also promised sign-in "without leaving the conversation", which was false on
 mobile until the OAuth work in §6.
 
-Replacement (1,326 chars — the portal's cap on this field has never been
+Replacement (1,368 chars — the portal's cap on this field has never been
 measured; the version it accepted was 1,146, so trim the closing paragraph
 first if it rejects this one):
 
@@ -66,12 +66,13 @@ weekend, what you earned this month and how much of it was cash, whether a
 booth is online right now, how many AI credits are left, or how much media
 a booth has produced. A sentence back, instead of opening the dashboard.
 
-It can make three things for you: a photo filter from a description of
-the look you want, a photo frame designed from a description and refined
-in conversation until it looks right, and a copy of a booth you already
-run. Everything else it only reads. It cannot edit a booth, issue a refund,
-move money or delete anything, and it sees only the account you sign in
-with. Your booths, never another operator's.
+It can make four things for you: a photo filter you preview before it is
+created, a photo frame designed from a description and refined in
+conversation, a whole booth designed from a description and created at its
+own link, and a copy of a booth you already run. Everything else it only
+reads. It cannot edit a booth, issue a refund, move money or delete
+anything, and it sees only the account you sign in with. Your booths, never
+another operator's.
 
 When a figure leaves something out it says so. Cash and voucher income
 never reaches the wallet ledger, so income is reported from the sessions
@@ -137,7 +138,7 @@ is deliberate: a prospective user who taps a starter prompt and is immediately
 told to sign in is the fastest way to lose them. An earlier draft led with four
 operator questions and buried the only openable one at position five.
 
-## 4. Positive test cases (8)
+## 4. Positive test cases (10)
 
 Each names the tool it should reach, so a reviewer seeing a different one has
 found a real routing problem rather than a wording preference.
@@ -149,11 +150,13 @@ found a real routing problem rather than a wording preference.
 | 3 | *Which booths do I have, and is each one online?* | `list_projects` then `get_project` | Booths listed with liveness. A quiet-but-healthy booth must not be reported as broken — the tool returns `livenessTier`, not `isOnline`. |
 | 4 | *How many AI credits do I have left and what plan am I on?* | `get_credits` | Credit balance and plan name. Credits must not be described as money. |
 | 5 | *My printer stopped responding mid-session — what do I do?* | `search_docs` | Steps from the documentation, **with no account connected**. |
-| 6 | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated. The card shows a preview swatch. Asking twice makes two filters — that is honest, not a bug, and `idempotentHint` says so. |
+| 6 | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated. The card shows the filter on the Studio's sample photo. Asking twice makes two filters — that is honest, not a bug, and `idempotentHint` says so. |
 | 8 | *Design me a photo strip frame with batik motifs in warm gold* | `start_frame`, then `check_generation`; `refine_frame` if changes are asked for; `save_frame` | The first call returns a job id and says nothing exists yet — a reviewer seeing "your frame is ready" straight away has found a real bug. `check_generation` shows a preview and says it is not saved; only `save_frame` creates the frame, and only once the operator has chosen a version. Generation is capped per day per account, so a refusal naming the reset time is correct behaviour, not a failure. |
 | 7 | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created and named `<original>-copy`, carrying the original's settings but **not** its public slug. It must resolve the booth by name to an id first; the operator will never say an id. |
+| 9 | *Design me a booth for a wedding in Bandung, warm gold, in Indonesian* | `start_booth`, then `check_generation`; `refine_booth` if changes are asked for; `create_booth` | The first call returns a job id and says nothing is designed yet. `check_generation` then shows a DRAFT (welcome preview, title, proposed link) and says it is not a booth — a reviewer seeing "your booth is ready" before `create_booth` has found a real bug. Changes go through `refine_booth` on the same draftId. `create_booth` is called only after the operator agrees the title and link name; its job draws the booth's own frames first (minutes), and when done the result carries the public link and a dashboard link. |
+| 10 | *Make me a warm, slightly faded filter — show me first* | `preview_filter`, then `create_filter` | A preview card with an image appears BEFORE anything is created; the answer names adjustments the preview cannot show. `create_filter` runs only after the operator approves, with the same adjustments. |
 
-## 5. Negative test cases (4)
+## 5. Negative test cases (5)
 
 | # | Prompt | Expected behaviour |
 |---|---|---|
@@ -161,6 +164,7 @@ found a real routing problem rather than a wording preference.
 | 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter and duplicating a booth, and nothing else. The connector should say so rather than claiming success. |
 | 4 | *Change the price on my Bandung booth* | States it cannot, and points at the dashboard. Editing an existing booth is the nearest thing to what the connector *can* do, which is what makes it the case worth running: `duplicate_project` must not be offered as a substitute for an edit. |
 | 3 | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. |
+| 5 | *Change the welcome text on my Bandung booth* | States it cannot, and points at the dashboard. `refine_booth` works on DRAFTS from `start_booth` only and must not be offered for an existing booth; nothing edits a booth that exists. |
 
 Case 3 is the one worth running first: it is the failure path most users hit,
 and it is verified by both smoke tests.

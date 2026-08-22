@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
 import type { Config } from "../config.js";
+import { filterAdjustments as adjustments } from "./filterAdjustments.js";
 
 /**
  * Wraps POST /api/filters.
@@ -14,51 +15,6 @@ import type { Config } from "../config.js";
  * gets a 403 whose sentence names the fix; see writeErrorFor.
  */
 
-/**
- * Ranges copied from `adjustmentRanges` in the Studio's
- * app/[locale]/dashboard/filters/[id]/page.tsx.
- *
- * These are in the schema, not just the description, because the model is
- * translating "hangat dan agak pudar" into numbers and has nothing else to go
- * on. Get the scale wrong and the filter is created successfully and looks
- * broken — the worst of both outcomes, because nothing reports an error.
- *
- * Only the adjustments an operator would ask for by name are exposed. The
- * Studio's model has thirty-odd; sharpening radius and noise-reduction
- * smoothness are not things anyone describes in a sentence, and every extra
- * field is another number for the model to invent.
- */
-const adjustments = z
-  .object({
-    brightness: z.number().min(0).max(200).optional().describe("100 = unchanged"),
-    contrast: z.number().min(0).max(200).optional().describe("100 = unchanged"),
-    saturation: z.number().min(0).max(200).optional().describe("100 = unchanged, 0 = grey"),
-    temperature: z
-      .number()
-      .min(-100)
-      .max(100)
-      .optional()
-      .describe("0 = unchanged, positive = warmer"),
-    tint: z.number().min(-100).max(100).optional().describe("0 = unchanged, positive = magenta"),
-    exposure: z.number().min(-100).max(100).optional().describe("0 = unchanged"),
-    shadows: z.number().min(-100).max(100).optional().describe("0 = unchanged, positive = lifted"),
-    highlights: z.number().min(-100).max(100).optional().describe("0 = unchanged"),
-    whites: z.number().min(-100).max(100).optional().describe("0 = unchanged"),
-    blacks: z.number().min(-100).max(100).optional().describe("0 = unchanged"),
-    vibrance: z.number().min(-100).max(100).optional().describe("0 = unchanged"),
-    clarity: z.number().min(-100).max(100).optional().describe("0 = unchanged"),
-    dehaze: z.number().min(-100).max(100).optional().describe("0 = unchanged"),
-    sepia: z.number().min(0).max(100).optional().describe("0 = off"),
-    grayscale: z.number().min(0).max(100).optional().describe("0 = off, 100 = black and white"),
-    vignette: z.number().min(0).max(200).optional().describe("0 = off"),
-    grain: z.number().min(0).max(100).optional().describe("0 = off"),
-    blur: z.number().min(0).max(10).optional().describe("0 = off, in pixels"),
-    hueRotate: z.number().min(0).max(360).optional().describe("0 = unchanged, in degrees"),
-  })
-  .describe(
-    "Only include what the operator asked to change. An omitted adjustment keeps its neutral value; sending every field at its neutral value creates a filter that does nothing."
-  );
-
 export const createFilterOutput = {
   kind: z.literal("filter"),
   id: z.string().optional(),
@@ -66,6 +22,8 @@ export const createFilterOutput = {
   isPublic: z.boolean().optional(),
   adjustments: z.record(z.number()).optional(),
   dashboardUrl: z.string().optional(),
+  /** The saved filter on the Studio's sample photo, for the card. Best-effort. */
+  previewUrl: z.string().optional(),
 };
 
 interface FilterDoc {
@@ -119,6 +77,25 @@ export function buildCreateFilter(studio: StudioClient, config: Config) {
         isPublic: args.isPublic ?? false,
       });
 
+      /**
+       * The look, for the card: the same render `preview_filter` shows, on the
+       * filter as saved. Best-effort — a Studio without the preview route, or a
+       * slow render, must not turn a filter that was created into an error.
+       */
+      let previewUrl: string | undefined;
+      try {
+        const preview = await studio.get<{ previewUrl?: string }>(
+          "/api/filters/preview",
+          { adjustments: JSON.stringify(created?.adjustments ?? args.adjustments ?? {}) },
+          { timeoutMs: 30_000 }
+        );
+        if (typeof preview?.previewUrl === "string" && preview.previewUrl.startsWith("https://")) {
+          previewUrl = preview.previewUrl;
+        }
+      } catch {
+        /* the card shows the numbers and the link instead */
+      }
+
       return {
         kind: "filter" as const,
         id: created?._id,
@@ -128,6 +105,7 @@ export function buildCreateFilter(studio: StudioClient, config: Config) {
         // decides what it stores, and reporting what we sent would hide the
         // difference the moment those two diverge.
         adjustments: created?.adjustments ?? args.adjustments,
+        previewUrl,
         dashboardUrl: created?._id
           ? `${config.apiUrl}/dashboard/filters/${created._id}`
           : undefined,
