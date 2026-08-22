@@ -17,8 +17,10 @@ import { buildConnectionStatus } from "../tools/connectionStatus.js";
 import { buildSessionInfo } from "../tools/sessionInfo.js";
 import { buildCreateFilter } from "../tools/createFilter.js";
 import { buildDuplicateProject } from "../tools/duplicateProject.js";
-import { buildGenerateFrame } from "../tools/generateFrame.js";
+import { buildStartFrame } from "../tools/startFrame.js";
+import { buildRefineFrame } from "../tools/refineFrame.js";
 import { buildCheckGeneration } from "../tools/checkGeneration.js";
+import { buildSaveFrame } from "../tools/saveFrame.js";
 import { registerWidget, withWidget, widgetAccessible } from "./widgets.js";
 import {
   CONNECT_WIDGET_URI,
@@ -28,6 +30,11 @@ import {
   WRITE_RESULT_WIDGET_URI,
   writeResultWidgetHtml,
 } from "../ui/writeResult.js";
+import {
+  GENERATION_IMAGE_ORIGINS,
+  GENERATION_WIDGET_URI,
+  generationWidgetHtml,
+} from "../ui/generationResult.js";
 import { STDIO_SESSION, type SessionContext } from "./session.js";
 
 export const SERVER_NAME = "dreambooth";
@@ -122,9 +129,9 @@ const GRANTS_ACCESS = {
 /**
  * The write tools. Every claim here is checkable, which is the point.
  *
- * `destructiveHint: false` is true and load-bearing: both tools only ever add
- * a row. Nothing they can do overwrites or removes anything, because the
- * Studio never opened a PUT or a DELETE to this connection.
+ * `destructiveHint: false` is true and load-bearing: every one of them only
+ * ever adds a row. Nothing they can do overwrites or removes anything,
+ * because the Studio never opened a PUT or a DELETE to this connection.
  *
  * `idempotentHint: false` is the uncomfortable one, and it is stated rather
  * than hidden: calling create_filter twice makes two filters. A client that
@@ -317,7 +324,7 @@ export function createServer(
       title: "What was created",
       html: writeResultWidgetHtml,
       description:
-        "A card confirming what was just created — the filter's name with a preview swatch, or the duplicated booth — and a link to it in the dashboard.",
+        "A card confirming what was just created — the filter's name with a preview swatch, the duplicated booth, or the saved frame — and a link to it in the dashboard.",
     });
 
     const createFilter = buildCreateFilter(studio, config);
@@ -349,27 +356,48 @@ export function createServer(
     );
 
     /**
-     * Frame generation is the one pair here, because it cannot answer in one
-     * call — the Studio route declares maxDuration 120 and this service times
-     * out at 15. `generate_frame` starts the work; `check_generation` reports.
+     * Frame generation is four tools, because it cannot answer in one call and
+     * because one answer is rarely the last. An image-model round trip runs
+     * 30–90 s against a 15 s request timeout, so `start_frame` and
+     * `refine_frame` start work and return a handle, and `check_generation`
+     * reports on it. And a first prompt rarely lands, so the shape is the
+     * dashboard's Frame Studio thread: start, look, refine in the same thread,
+     * and only `save_frame` puts a frame in the operator's list.
      *
-     * No widget on `generate_frame`: at the moment it returns, nothing has
-     * been created, and a card is a claim that something has. The result card
-     * belongs on the tool that can actually show a frame.
+     * No widget on `start_frame` / `refine_frame`: at the moment they return,
+     * nothing has been generated, and a card is a claim that something has.
+     * The preview card belongs on `check_generation`, the only tool that can
+     * show an image; the "frame created" card on `save_frame`.
      *
-     * Behind `ENABLE_FRAME_GENERATION`, and off by default. Vertex answers
-     * `404 NOT_FOUND` for the Imagen model this project asks for, so these two
-     * are complete, tested, and currently incapable of succeeding. Listing a
-     * tool that always fails is worse than not listing it: a reviewer reads it
-     * as a broken connector and an operator reads it as a broken account.
-     * See `Config.frameGeneration`.
+     * Behind `ENABLE_FRAME_GENERATION`, and off by default, until a real
+     * start → refine → save round has been run against production. See
+     * `Config.frameGeneration`.
      */
     if (config.frameGeneration) {
-      const generateFrame = buildGenerateFrame(studio, config);
+      registerWidget(server, {
+        uri: GENERATION_WIDGET_URI,
+        name: "generation-preview-card",
+        title: "Frame preview",
+        html: generationWidgetHtml,
+        description:
+          "A card showing the generated frame preview — or that it is still generating, or why it failed. A preview is not a saved frame.",
+        // The one card that loads an image, so the one card whose CSP names
+        // an origin. See GENERATION_IMAGE_ORIGINS for why these.
+        csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
+      });
+
+      const startFrame = buildStartFrame(studio);
       server.registerTool(
-        generateFrame.name,
-        { ...generateFrame.config, annotations: CREATES },
-        safe(generateFrame.handler),
+        startFrame.name,
+        { ...startFrame.config, annotations: CREATES },
+        safe(startFrame.handler),
+      );
+
+      const refineFrame = buildRefineFrame(studio);
+      server.registerTool(
+        refineFrame.name,
+        { ...refineFrame.config, annotations: CREATES },
+        safe(refineFrame.handler),
       );
 
       const checkGeneration = buildCheckGeneration(studio, config);
@@ -380,10 +408,21 @@ export function createServer(
           // poll without asking the operator each time, which is the only way
           // polling is tolerable.
           { ...checkGeneration.config, annotations: READ_ONLY },
-          WRITE_RESULT_WIDGET_URI,
-          { invoking: "Mengecek…", invoked: "Status generasi" },
+          GENERATION_WIDGET_URI,
+          { invoking: "Mengecek…", invoked: "Pratinjau frame" },
         ),
         safe(checkGeneration.handler),
+      );
+
+      const saveFrame = buildSaveFrame(studio, config);
+      server.registerTool(
+        saveFrame.name,
+        withWidget(
+          { ...saveFrame.config, annotations: CREATES },
+          WRITE_RESULT_WIDGET_URI,
+          { invoking: "Menyimpan frame…", invoked: "Frame disimpan" },
+        ),
+        safe(saveFrame.handler),
       );
     }
   }

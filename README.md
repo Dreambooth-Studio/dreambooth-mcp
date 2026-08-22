@@ -193,27 +193,36 @@ That is the complete read set. Two more wrap a route that creates something:
 |---|---|---|
 | `create_filter` | `POST /api/filters` | Bearer + `booths:write` |
 | `duplicate_project` | `POST /api/projects?duplicate` | Bearer + `booths:write` |
-| `generate_frame` | `POST /api/ai/frames/create` | Bearer + `booths:write` |
+| `start_frame` | `POST /api/ai/frames/start`, then `POST /api/ai/threads/{id}/messages` | Bearer + `booths:write` |
+| `refine_frame` | `POST /api/ai/threads/{id}/messages` | Bearer + `booths:write` |
 | `check_generation` | nothing — reads this process | Bearer |
+| `save_frame` | `POST /api/ai/frames/from-generation` | Bearer + `booths:write` |
 
-> **`generate_frame` and `check_generation` are off by default**, behind
-> `ENABLE_FRAME_GENERATION=1`. Vertex answers `404 NOT_FOUND` for the Imagen
-> model this project asks for, so the pair is complete and tested and cannot
-> currently succeed. A listed tool that always fails reads as a broken
-> connector to a reviewer and a broken account to an operator, so it is absent
-> instead. Turn the flag on in the same change that makes a real generation
-> work, and restore the frame lines in `docs/chatgpt-listing.md` at the same
-> time.
+> **The four frame tools are off by default**, behind
+> `ENABLE_FRAME_GENERATION=1`. They are complete and tested against a fake
+> Studio, but the Studio routes they call are new and no real
+> start → refine → save round has been run against production yet. A listed
+> tool that always fails reads as a broken connector to a reviewer and a broken
+> account to an operator, so they are absent instead. Turn the flag on in the
+> same change that proves a round works (`oauth-write-check.mjs` in the
+> mcp-verify skill does exactly that), and restore the frame lines in
+> `docs/chatgpt-listing.md` at the same time.
 
-`generate_frame` is the only pair here. Frame generation is an image-model
-call and the Studio route declares `maxDuration = 120`, against a 15-second
-request timeout in this service. Raising the timeout would not help: a tool
-call that blocks for two minutes reads as a hung server to every MCP client.
-So it starts the work, returns a job id, and `check_generation` reports —
-the shape `connect_account` already uses for the device flow. Until
-`check_generation` says `done`, **nothing has been created**, and both the
-tool description and the result card say so rather than leaving a model to
-guess.
+Frame generation is the one flow here that is neither a single call nor a
+single answer. An image-model round trip runs 30–90 seconds against a
+15-second request timeout in this service, and raising the timeout would not
+help: a tool call that blocks that long reads as a hung server to every MCP
+client. So `start_frame` and `refine_frame` start the work and return a job
+id, and `check_generation` reports — the shape `connect_account` already uses
+for the device flow. And one prompt rarely lands, so the flow is the
+dashboard's Frame Studio thread: `start_frame` opens a thread on a blank
+template and makes the first version, `refine_frame` makes the next one in
+the same thread ("darker", "less ornament"), and only `save_frame` turns the
+generation the operator chose into a frame in their list. Until then
+**nothing is saved**, and the tool descriptions, the results and the preview
+card all say so rather than leaving a model to guess. Every generation spends
+part of the account's free daily allowance, which is why the descriptions tell
+the model never to iterate on its own initiative.
 
 Jobs live in this process, keyed by a hash of the bearer that started them —
 never the bearer itself, which would mean holding operator credentials for as
@@ -222,10 +231,12 @@ at the dashboard rather than reporting a failure that may not have happened.
 **Running a second instance would break polling**; the fix at that point is a
 shared store.
 
-It generates at named print sizes rather than at a width and a height the
-model chose. `drawParams.canvasWidth/Height` is the contract the booth prints
-against, and invented numbers produce a frame that is created successfully and
-prints wrong — a failure that reports nothing.
+It generates onto the Studio's blank templates (`layout` + `shape`, resolved
+server-side), never at a width, a height or a photo window the model chose.
+`drawParams` is the contract the booth prints against, and invented geometry
+produces a frame that is created successfully and prints wrong — a failure
+that reports nothing. The saved frame's photo windows are keyed transparent by
+the same server code the /new onboarding flow uses.
 
 **They are registered only when the request carries its own bearer token** —
 that is, on the OAuth path. On stdio, and on a device-flow HTTP session, they
@@ -237,7 +248,7 @@ the other one. The Studio enforces the same rule independently — see
 for why the gate here cannot check the scope itself.
 
 Nothing edits, nothing deletes, and nothing touches money. There is no `put` or
-`delete` on `StudioClient`, and the Studio opened exactly three POST handlers.
+`delete` on `StudioClient`, and the Studio opened exactly five POST handlers to it.
 
 Two more tools exist that wrap nothing:
 `connection_status` (is this session authenticated — polled by the connect card)

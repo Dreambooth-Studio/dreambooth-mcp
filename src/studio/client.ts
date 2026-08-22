@@ -98,11 +98,12 @@ export class StudioClient {
   /**
    * Creates something. The only method here that changes anything.
    *
-   * Two Studio routes accept it — POST /api/filters and the ?duplicate branch
-   * of POST /api/projects — and both require an OAuth access token carrying
-   * `booths:write`. A read-scoped token, or the device-flow session token, is
-   * refused by the Studio with a 403 whose message is written to be relayed
-   * verbatim; see `studioErrorFor`.
+   * The Studio routes that accept it — POST /api/filters, the ?duplicate
+   * branch of POST /api/projects, and the frame routes (`/api/ai/frames/start`,
+   * `/api/ai/threads/{id}/messages`, `/api/ai/frames/from-generation`) — all
+   * require an OAuth access token carrying `booths:write`. A read-scoped
+   * token, or the device-flow session token, is refused by the Studio with a
+   * 403 whose message is written to be relayed verbatim; see `studioErrorFor`.
    *
    * There is deliberately no `put` or `delete`. Adding one would be a two-line
    * change here and a much larger one everywhere else: the consent screen, the
@@ -112,7 +113,8 @@ export class StudioClient {
   async post<T>(
     path: string,
     body: unknown,
-    query: Record<string, string | undefined> = {}
+    query: Record<string, string | undefined> = {},
+    options: { timeoutMs?: number } = {}
   ): Promise<T> {
     const token = this.requireToken();
     const url = new URL(this.config.apiUrl + path);
@@ -121,7 +123,18 @@ export class StudioClient {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+    /**
+     * The per-request ceiling is the config's, except for work that is already
+     * in the background. A frame generation waits on an image model for
+     * 30–90 s; aborting it at 15 s would fail every one and report "may have
+     * gone through" for a request that was simply still running. Only a
+     * background job passes a longer value here, and it never blocks a tool
+     * call — see GENERATION_TIMEOUT_MS.
+     */
+    const timer = setTimeout(
+      () => controller.abort(),
+      options.timeoutMs ?? this.config.requestTimeoutMs
+    );
 
     let res: Response;
     try {

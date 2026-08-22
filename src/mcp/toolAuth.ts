@@ -25,8 +25,10 @@ export const AUTH_REQUIRED_TOOLS = new Set([
   // Listing them here turns that into the 401 that begins the OAuth flow.
   "create_filter",
   "duplicate_project",
-  "generate_frame",
+  "start_frame",
+  "refine_frame",
   "check_generation",
+  "save_frame",
 ]);
 
 /**
@@ -82,7 +84,12 @@ export function toolCallName(body: unknown): string | null {
  * tool is unknown — a sign-in loop with nothing at the end of it. Better to
  * let it fall through to the honest "unknown tool".
  */
-export const FLAGGED_TOOLS = new Set(["generate_frame", "check_generation"]);
+export const FLAGGED_TOOLS = new Set([
+  "start_frame",
+  "refine_frame",
+  "check_generation",
+  "save_frame",
+]);
 
 /** True when this request is a call to a tool that cannot work without a token. */
 export function requiresAuth(
