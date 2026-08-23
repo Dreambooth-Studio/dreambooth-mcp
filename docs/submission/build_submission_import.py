@@ -6,15 +6,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # upload. Override with CHATGPT_SUBMISSION_OUT.
 OUT = os.environ.get("CHATGPT_SUBMISSION_OUT") or os.path.join(HERE, "chatgpt-app-submission.json")
 SCHEMA_LOCAL = os.path.join(HERE, "chatgpt-app-submission.v1.json")
-# The portal's error message names the /apps-sdk/ URL, and OpenAI's own
-# submission skill writes it - but the portal REJECTED a file carrying it
-# (2026-08-23). The published schema's `$id` and its `$schema` const are the
-# /plugins/ URL (the /apps-sdk/ one is a 301 to it), and that is the one value
-# under which the file validates with zero errors against the schema as
-# published, so it is what we write. If the importer ever flips, the other
-# URL is one line away.
-SCHEMA_URL = "https://developers.openai.com/plugins/schemas/chatgpt-app-submission.v1.json"
-SCHEMA_URL_DOCS = "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json"
+# What the importer checks, as far as three imports on 2026-08-23 reveal:
+#   - /apps-sdk/ URL, 20 scanned tools          -> imported (the form then asked for exactly 5/3 cases)
+#   - /apps-sdk/ URL, 22 tools (2 not scanned)  -> "must use $schema ..." (the importer's catch-all)
+#   - /plugins/ URL (the schema's own const)    -> "must use $schema ..."
+# So the importer wants the /apps-sdk/ URL literally - the one its message
+# names and OpenAI's submission skill writes - even though the published
+# schema's `const` says /plugins/ (it is a 301 target); and every tool and
+# every tools_triggered name must be one the portal has already scanned. The
+# same catch-all message covers both, which is what made this hard to see.
+SCHEMA_URL = "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json"
 
 def no_dash(s):
     return (s.replace(" \u2014 ", ", ").replace("\u2014", "-")
@@ -290,6 +291,22 @@ def without_excluded(tools_triggered):
     return ", ".join(kept)
 for c in POSITIVE:
     c["tools_triggered"] = without_excluded(c["tools_triggered"])
+if "update_booth_draft" in EXCLUDE:
+    # The copy must describe what the portal can see today.
+    APP_INFO["description"] = APP_INFO["description"].replace(
+        "a whole booth designed from a description, adjusted in conversation and created at its own link",
+        "a whole booth designed from a description and created at its own link",
+    ).replace("It cannot edit a booth that already exists,", "It cannot edit a booth,")
+    for c in NEGATIVE:
+        c["expected_output"] = c["expected_output"].replace(
+            "a booth from a design (and adjusting that draft before it is created), and a copy of a booth",
+            "a booth from a design, and a copy of a booth",
+        ).replace("must not offer refine_booth or update_booth_draft (drafts only)", "must not offer refine_booth (drafts only)")
+    for c in POSITIVE:
+        c["expected_output"] = c["expected_output"].replace(
+            "Visual changes go through refine_booth on the same draftId; settings, button text, colours, frames and filters go through update_booth_draft (no redraw) - only if the operator asks.",
+            "Changes go through refine_booth on the same draftId, only if the operator asks.",
+        )
 tools = {}
 for name in ANN:
     assert name in J, f"no justifications for {name}"
@@ -321,8 +338,8 @@ def req(obj, keys, where):
     for k in keys:
         if k not in obj: problems.append(f"{where}: missing {k}")
 req(doc, schema["required"], "root")
-if doc["$schema"] != schema["properties"]["$schema"]["const"]:
-    problems.append("$schema value differs from the published schema's const")
+if doc["$schema"] != SCHEMA_URL:
+    problems.append("$schema value")
 if doc["schema_version"] != 1: problems.append("schema_version must be 1")
 ai = doc["app_info"]
 if not re.search(r"\S", ai["display_name"]): problems.append("display_name empty")
@@ -357,7 +374,9 @@ for i, c in enumerate(doc["negative_test_cases"]):
 # the /apps-sdk/ one, so validate against a copy that accepts both.
 try:
     import jsonschema
-    sch = copy.deepcopy(schema)  # as published - including its $schema const
+    sch = copy.deepcopy(schema)
+    # The published const names the /plugins/ URL; the importer wants /apps-sdk/.
+    sch["properties"]["$schema"] = {"enum": [SCHEMA_URL, schema["properties"]["$schema"]["const"]]}
     jsonschema.Draft202012Validator.check_schema(sch)
     errs = sorted(jsonschema.Draft202012Validator(sch).iter_errors(doc), key=lambda e: list(e.path))
     for e in errs: problems.append("jsonschema: " + "/".join(map(str, e.path)) + ": " + e.message)
