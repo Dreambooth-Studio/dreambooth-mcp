@@ -76,6 +76,7 @@ const SCRIPT = `
 (function () {
   var db = window.__db;
   var el = document.getElementById("content");
+  var card = document.getElementById("card");
 
   var COPY = {
     id: {
@@ -279,6 +280,7 @@ const SCRIPT = `
   }
 
   function renderRunning(out) {
+    db.linkCard(card, null);
     el.innerHTML =
       '<div class="db-status"><span class="db-spinner" aria-hidden="true"></span><span>' + esc(workingTitle(out.kind)) + '</span></div>' +
       '<div class="db-live">' + skeleton(out.kind) + '<div>' +
@@ -344,6 +346,7 @@ const SCRIPT = `
       imageTag(b.imageUrl) +
       '<p class="db-note">' + link(b.boothUrl, t.openBooth) +
         (b.dashboardUrl ? ' &nbsp; ' + link(b.dashboardUrl, t.openDashboard) : '') + '</p>';
+    db.linkCard(card, b.boothUrl || b.dashboardUrl);
     watchImages();
     db.fit();
   }
@@ -360,6 +363,7 @@ const SCRIPT = `
       '<p class="db-sub">' + esc(facts.join(" · ")) + '</p>' +
       imageTag(out.thumbnailUrl) +
       (out.dashboardUrl ? '<p class="db-note">' + link(out.dashboardUrl, t.openDashboard) + '</p>' : '');
+    db.linkCard(card, out.dashboardUrl);
     watchImages();
     db.fit();
   }
@@ -375,6 +379,7 @@ const SCRIPT = `
       '<p class="db-sub">' + esc(facts) + '</p>' +
       imageTag(out.previewUrl) +
       (out.dashboardUrl ? '<p class="db-note">' + link(out.dashboardUrl, t.openDashboard) + '</p>' : '');
+    db.linkCard(card, out.dashboardUrl);
     watchImages();
     db.fit();
   }
@@ -452,6 +457,9 @@ const SCRIPT = `
 
   function render() {
     var out = current;
+    // Only the three "it now exists" states re-link the card below; everything
+    // else (draft, preview, running, failed) must not look clickable.
+    db.linkCard(card, null);
     if (!out || !out.kind) { renderError(t.failed, out && out.error ? out.error : ""); return; }
     if (out.kind === "filter-preview") { renderFilterPreview(out); return; }
     if (out.kind === "filter") { renderFilter(out); return; }

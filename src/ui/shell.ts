@@ -169,6 +169,72 @@ const BRIDGE_JS = `
     if (typeof db.onGlobals === "function") db.onGlobals();
   });
 
+  /**
+   * Leaving the card goes through the host.
+   *
+   * A sandboxed iframe is not necessarily allowed to open windows on its own,
+   * and the documented way out of a ChatGPT widget is window.openai.openExternal.
+   * So every https link in a card, and every card that names a destination in
+   * data-open-href, is routed through db.openExternal. When the host has no
+   * such API the anchor keeps its own target="_blank", which is the best a
+   * bare iframe can do, so nothing here ever makes a link worse.
+   */
+  function isHttps(href) {
+    return typeof href === "string" && href.indexOf("https://") === 0;
+  }
+
+  document.addEventListener("click", function (e) {
+    var target = e.target;
+    if (!target || typeof target.closest !== "function") return;
+    var a = target.closest("a[href]");
+    if (a) {
+      if (isHttps(a.getAttribute("href")) && typeof api.openExternal === "function") {
+        e.preventDefault();
+        db.openExternal(a.href);
+      }
+      return;
+    }
+    var card = target.closest("[data-open-href]");
+    if (!card) return;
+    // Selecting text inside the card is not asking to leave it.
+    try { if (window.getSelection && String(window.getSelection())) return; } catch (err) {}
+    var url = card.getAttribute("data-open-href");
+    if (!isHttps(url)) return;
+    e.preventDefault();
+    db.openExternal(url);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var target = e.target;
+    if (!target || typeof target.closest !== "function") return;
+    if (!target.hasAttribute || !target.hasAttribute("data-open-href")) return;
+    var url = target.getAttribute("data-open-href");
+    if (!isHttps(url)) return;
+    e.preventDefault();
+    db.openExternal(url);
+  });
+
+  /**
+   * Makes the whole card a link to one destination, or removes that again.
+   * Only cards for things that now exist call this with a URL; a draft or a
+   * preview has nowhere to go yet and must not look clickable.
+   */
+  db.linkCard = function (card, href) {
+    if (!card) return;
+    if (isHttps(href)) {
+      card.setAttribute("data-open-href", href);
+      card.setAttribute("role", "link");
+      card.setAttribute("tabindex", "0");
+      card.classList.add("db-card--link");
+    } else {
+      card.removeAttribute("data-open-href");
+      card.removeAttribute("role");
+      card.removeAttribute("tabindex");
+      card.classList.remove("db-card--link");
+    }
+  };
+
   db.applyTheme();
   db.applyLang();
   window.__db = db;
