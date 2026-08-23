@@ -333,6 +333,13 @@ exists:
   shows, fetched after the save — best-effort); `preview_filter` shows the
   preview and names the adjustments it cannot show.
 
+Leaving a card goes through the host. Every `https` link in a card is routed
+through `window.openai.openExternal` (where the host has no such API the anchor
+keeps its own `target="_blank"`), and once the thing exists the whole card is the
+link: a created booth opens its public link, a saved frame, a created filter or
+a duplicated booth opens the dashboard. Drafts, previews and live cards are
+deliberately not links — nothing exists yet to open.
+
 Nothing about this changes other clients. Every tool result carries the payload
 twice: `structuredContent` for widgets, and the same object pretty-printed as
 text `content` for Claude and Gemini, which render no widget. The text block is

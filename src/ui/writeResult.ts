@@ -36,6 +36,7 @@ const SCRIPT = `
 (function () {
   var db = window.__db;
   var el = document.getElementById("content");
+  var card = document.getElementById("card");
 
   var COPY = {
     id: {
@@ -98,12 +99,14 @@ const SCRIPT = `
       '<p class="db-title" style="margin-top:.5rem">' + esc(out.title) + '</p>' +
       '<p class="db-sub">' + esc(facts.join(" · ")) + '</p>' +
       link(out.dashboardUrl);
+    db.linkCard(card, out.dashboardUrl);
     db.fit();
   }
 
   function renderError(message) {
     // No dashboard link on this branch: there is nothing there to look at, and
     // a link on a failure reads as "it half worked".
+    db.linkCard(card, null);
     el.innerHTML =
       '<div class="db-status db-status--err"><span>' + esc(t.failed) + '</span></div>' +
       (message ? '<p class="db-sub" style="margin-top:.5rem">' + esc(message) + '</p>' : '');

@@ -177,4 +177,7 @@ body{
 @media (prefers-reduced-motion:reduce){.db-spinner{animation-duration:2.4s}}
 .db-link{color:var(--db-primary-text);text-decoration:none;font-size:.75rem}
 .db-link:hover{text-decoration:underline}
+.db-card--link{cursor:pointer}
+.db-card--link:hover{border-color:var(--db-border-strong)}
+.db-card--link:focus-visible{outline:2px solid var(--db-primary-text);outline-offset:2px}
 `;
