@@ -34,3 +34,9 @@ chatgpt-skills/*.zip
 # output like .preview itself — regenerate with npm run preview and the
 # render step rather than committing PNGs.
 .screenshots/
+
+# ChatGPT app submission: the generated import file and the portal's exports.
+# The exports carry the reviewer account's credentials; the import file is
+# rebuilt from docs/submission/build_submission_import.py.
+chatgpt-app-submission.json
+dreambooth-studio-*.json
