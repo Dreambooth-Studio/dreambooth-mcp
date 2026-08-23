@@ -6,11 +6,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # CHATGPT_SUBMISSION_OUT.
 OUT = os.environ.get("CHATGPT_SUBMISSION_OUT") or os.path.normpath(os.path.join(HERE, "..", "..", "chatgpt-app-submission.json"))
 SCHEMA_LOCAL = os.path.join(HERE, "chatgpt-app-submission.v1.json")
-# The value the portal's importer names in its error ("must use $schema ...") and
-# the one OpenAI's own chatgpt-app-submission skill writes. The schema file that
-# URL serves is a 301 to /plugins/schemas/... and its own `const` says the
-# /plugins/ URL - an inconsistency on OpenAI's side; the portal is the authority.
-SCHEMA_URL = "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json"
+# The portal's error message names the /apps-sdk/ URL, and OpenAI's own
+# submission skill writes it - but the portal REJECTED a file carrying it
+# (2026-08-23). The published schema's `$id` and its `$schema` const are the
+# /plugins/ URL (the /apps-sdk/ one is a 301 to it), and that is the one value
+# under which the file validates with zero errors against the schema as
+# published, so it is what we write. If the importer ever flips, the other
+# URL is one line away.
+SCHEMA_URL = "https://developers.openai.com/plugins/schemas/chatgpt-app-submission.v1.json"
+SCHEMA_URL_DOCS = "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json"
 
 def no_dash(s):
     return (s.replace(" \u2014 ", ", ").replace("\u2014", "-")
@@ -274,6 +278,18 @@ def case(c):
     }
 
 # ------------------------------------------------------------------ assemble
+# Tools the portal has not scanned yet can be left out for an interim import:
+#   CHATGPT_SUBMISSION_EXCLUDE="get_booth_draft,update_booth_draft" python build_submission_import.py
+EXCLUDE = {t.strip() for t in os.environ.get("CHATGPT_SUBMISSION_EXCLUDE", "").split(",") if t.strip()}
+for t in EXCLUDE:
+    assert t in ANN, f"CHATGPT_SUBMISSION_EXCLUDE names an unknown tool: {t}"
+    del ANN[t]
+    del J[t]
+def without_excluded(tools_triggered):
+    kept = [t for t in re.split(r",\s*", tools_triggered) if t not in EXCLUDE]
+    return ", ".join(kept)
+for c in POSITIVE:
+    c["tools_triggered"] = without_excluded(c["tools_triggered"])
 tools = {}
 for name in ANN:
     assert name in J, f"no justifications for {name}"
@@ -305,8 +321,8 @@ def req(obj, keys, where):
     for k in keys:
         if k not in obj: problems.append(f"{where}: missing {k}")
 req(doc, schema["required"], "root")
-if doc["$schema"] not in (SCHEMA_URL, schema["properties"]["$schema"]["const"]):
-    problems.append("$schema value")
+if doc["$schema"] != schema["properties"]["$schema"]["const"]:
+    problems.append("$schema value differs from the published schema's const")
 if doc["schema_version"] != 1: problems.append("schema_version must be 1")
 ai = doc["app_info"]
 if not re.search(r"\S", ai["display_name"]): problems.append("display_name empty")
@@ -341,8 +357,7 @@ for i, c in enumerate(doc["negative_test_cases"]):
 # the /apps-sdk/ one, so validate against a copy that accepts both.
 try:
     import jsonschema
-    sch = copy.deepcopy(schema)
-    sch["properties"]["$schema"] = {"enum": [SCHEMA_URL, schema["properties"]["$schema"]["const"]]}
+    sch = copy.deepcopy(schema)  # as published - including its $schema const
     jsonschema.Draft202012Validator.check_schema(sch)
     errs = sorted(jsonschema.Draft202012Validator(sch).iter_errors(doc), key=lambda e: list(e.path))
     for e in errs: problems.append("jsonschema: " + "/".join(map(str, e.path)) + ": " + e.message)
