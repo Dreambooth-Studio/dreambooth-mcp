@@ -1,10 +1,10 @@
 import io, json, re, copy, sys, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# Written to the repo root as chatgpt-app-submission.json (gitignored) and, when
-# it exists, copied to ~/Downloads for the portal upload. Override with
-# CHATGPT_SUBMISSION_OUT.
-OUT = os.environ.get("CHATGPT_SUBMISSION_OUT") or os.path.normpath(os.path.join(HERE, "..", "..", "chatgpt-app-submission.json"))
+# Written next to this script, docs/submission/chatgpt-app-submission.json
+# (gitignored), and, when it exists, copied to ~/Downloads for the portal
+# upload. Override with CHATGPT_SUBMISSION_OUT.
+OUT = os.environ.get("CHATGPT_SUBMISSION_OUT") or os.path.join(HERE, "chatgpt-app-submission.json")
 SCHEMA_LOCAL = os.path.join(HERE, "chatgpt-app-submission.v1.json")
 # The portal's error message names the /apps-sdk/ URL, and OpenAI's own
 # submission skill writes it - but the portal REJECTED a file carrying it
