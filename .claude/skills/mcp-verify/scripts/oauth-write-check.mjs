@@ -366,6 +366,8 @@ for (const t of [
   "start_booth",
   "refine_booth",
   "create_booth",
+  "get_booth_draft",
+  "update_booth_draft",
 ]) {
   ok(names.includes(t), `${t} appears in tools/list`);
 }
@@ -539,6 +541,36 @@ if (WITH_BOOTH) {
       );
     }
 
+    // Read the draft back, then change what a redraw cannot: the button
+    // text, the photo count, and the filter made earlier in this run. The
+    // Studio applies these at create, and the public project record says
+    // whether it did — the one assertion here that reaches the booth itself.
+    const readBack = payload((await call("get_booth_draft", { draftId: draft.draftId }))?.result);
+    ok(
+      readBack?.state === "done" && readBack?.draft?.draftId === draft.draftId,
+      "get_booth_draft reads the draft back",
+      readBack ? `title=${readBack.draft?.title}` : "no draft"
+    );
+    const edited = payload(
+      (
+        await call("update_booth_draft", {
+          draftId: draft.draftId,
+          buttonText: "Mulai",
+          settings: { capture: { captureCount: 4 } },
+          ...(filterOut?.id ? { filterIds: [filterOut.id] } : {}),
+        })
+      )?.result
+    );
+    ok(
+      edited?.state === "done" &&
+        Array.isArray(edited?.applied) &&
+        edited.applied.includes("cta") &&
+        edited.applied.includes("settings.capture.captureCount"),
+      "update_booth_draft applied the button text and the photo count",
+      edited ? `applied=${JSON.stringify(edited.applied)} rejected=${JSON.stringify(edited.rejected)}`.slice(0, 120) : "no reply"
+    );
+    ok(edited?.draft?.cta === "Mulai", "the draft now says the new button text", `cta=${edited?.draft?.cta}`);
+
     const created = await call("create_booth", {
       draftId: draft.draftId,
       title: `mcp-verify ${stamp}`,
@@ -558,6 +590,25 @@ if (WITH_BOOTH) {
       if (booth?.booth?.boothUrl) {
         console.log(`      booth: ${booth.booth.boothUrl}`);
         console.log(`      dashboard: ${booth.booth.dashboardUrl}`);
+        // The public project record: did the edits reach the booth?
+        try {
+          const rec = await (await fetch(`${STUDIO}/api/projects/by-slug?slug=${encodeURIComponent(booth.booth.slug)}`)).json();
+          ok(
+            rec?.pages?.capture?.settings?.captureCount === 4,
+            "the created booth carries the draft's photo count",
+            `captureCount=${rec?.pages?.capture?.settings?.captureCount}`
+          );
+          const filters = rec?.pages?.filter?.settings?.filterIds ?? [];
+          ok(
+            !filterOut?.id || filters.includes(filterOut.id),
+            "the created booth carries the filter made in this run",
+            `filterIds=${JSON.stringify(filters).slice(0, 80)}`
+          );
+          const button = (rec?.pages?.welcome?.components ?? []).find((c) => c?.type === "button");
+          ok(button?.text === "Mulai", "the created booth's welcome button says the new text", `text=${button?.text}`);
+        } catch (err) {
+          ok(false, "the created booth could be read back", String(err).slice(0, 80));
+        }
       }
     }
   }

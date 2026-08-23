@@ -106,7 +106,9 @@ const SCRIPT = `
       filterPreview: "Pratinjau filter",
       filterNote: "Belum dibuat — minta disimpan kalau sudah cocok.",
       notShown: "Tidak tampak di pratinjau (tetap diterapkan booth):",
-      workingOn: "Sedang:"
+      workingOn: "Sedang:",
+      setLine: "Diatur:",
+      notApplied: "Tidak diterapkan:"
     },
     en: {
       ready: "Preview ready",
@@ -135,7 +137,9 @@ const SCRIPT = `
       filterPreview: "Filter preview",
       filterNote: "Not created yet — ask to save it once it looks right.",
       notShown: "Not shown in the preview (the booth still applies them):",
-      workingOn: "Now:"
+      workingOn: "Now:",
+      setLine: "Set:",
+      notApplied: "Not applied:"
     },
     es: {
       ready: "Vista previa lista",
@@ -164,7 +168,9 @@ const SCRIPT = `
       filterPreview: "Vista previa del filtro",
       filterNote: "Aun no creado: pide guardarlo cuando se vea bien.",
       notShown: "No se ve en la vista previa (la cabina igual los aplica):",
-      workingOn: "Ahora:"
+      workingOn: "Ahora:",
+      setLine: "Ajustado:",
+      notApplied: "No aplicado:"
     }
   };
 
@@ -317,6 +323,13 @@ const SCRIPT = `
       g: typeof d.remainingFullGenerations === "number" ? d.remainingFullGenerations : "?",
       r: typeof d.remainingRegens === "number" ? d.remainingRegens : "?"
     });
+    // Capture mode and language, then what update_booth_draft set and what it
+    // could not — the operator should see both without reading the answer.
+    var mode = [d.captureMode, d.language].filter(Boolean).join(" · ");
+    var edited = Array.isArray(d.edited) ? d.edited : [];
+    var rejected = Array.isArray(out.rejected)
+      ? out.rejected.map(function (r) { return (r && r.field ? r.field + " " : "") + (r && r.reason ? r.reason : ""); })
+      : [];
 
     el.innerHTML =
       '<div class="db-status db-status--ok">' + CHECK + '<span>' + esc(t.draftReady) + '</span></div>' +
@@ -325,6 +338,9 @@ const SCRIPT = `
       '<p class="db-sub" style="margin-top:.5rem">' + swatch(p.backgroundColor) + swatch(p.primaryColor) + swatch(p.secondaryColor) +
         (d.slug ? '<span style="vertical-align:middle">dreambooth.app/' + esc(d.slug) + '</span>' : '') + '</p>' +
       imageTag(d.welcomePortraitUrl) +
+      (mode ? '<p class="db-sub" style="margin-top:.5rem">' + esc(mode) + '</p>' : '') +
+      (edited.length ? '<p class="db-sub" style="margin-top:.25rem">' + esc(t.setLine) + ' ' + esc(edited.join(' · ')) + '</p>' : '') +
+      (rejected.length ? '<p class="db-sub" style="margin-top:.25rem">' + esc(t.notApplied) + ' ' + esc(rejected.join('; ')) + '</p>' : '') +
       '<p class="db-sub" style="margin-top:.5rem">' + esc(remaining) + '</p>' +
       '<p class="db-note">' + esc(t.draftNote) + '</p>';
     watchImages();

@@ -16,15 +16,19 @@ import {
   SLUG_RE,
   boothErrorFor,
   pickStarterFrames,
+  readBoothDraft,
+  resolveAiEffect,
   type BoothCreated,
   type BoothDraftResult,
 } from "./boothGeneration.js";
+import { recentCreations } from "../creations/recent.js";
 
 /**
  * Turns a booth draft into a booth — the one step in the booth flow that makes
  * something real, and therefore the one that replicates /new's last screens
  * rather than a single route:
  *
+ *   0. the draft as the Studio holds it      GET  /api/onboarding/draft (what update_booth_draft gave it; its title and slug when the call names none)
  *   1. is the link name free?                GET  /api/projects/by-slug?checkOnly
  *   2. which AI effect, if one was named?     GET  /api/ai-effects/catalog
  *   3. the booth's own three frames           POST /api/onboarding/draft-frames (drawn now, like /new's Strip step)
@@ -85,8 +89,9 @@ function dedupe(ids: Array<string | undefined>): string[] {
 
 export interface CreateBoothArgs {
   draftId: string;
-  title: string;
-  slug: string;
+  /** Both default to what the draft proposes (or was given with update_booth_draft). */
+  title?: string;
+  slug?: string;
   captureMode?: "standard" | "frame-based";
   aiEffectTitle?: string;
   frameIds?: string[];
@@ -119,6 +124,9 @@ export async function createBoothWork(
     draftTerms?: string[];
     /** The draft's welcome design, shown on the card if no thumbnail came back. */
     draftImage?: string;
+    /** Frames saved and filters made on this connection recently — carried without being named. */
+    recentFrameIds?: string[];
+    recentFilterIds?: string[];
     pollSleep?: (ms: number) => Promise<void>;
   } = {}
 ): Promise<BoothCreated> {
@@ -126,12 +134,38 @@ export async function createBoothWork(
   const get = async <T>(path: string, query: Record<string, string | undefined>) =>
     studio.get<T>(path, query);
 
+  // 0. The draft as the Studio holds it: what update_booth_draft gave it
+  // (frames, filters, AI effect, settings — the settings the Studio applies
+  // itself at create), and the title and link name it proposed, which stand in
+  // when the call names none. Best-effort: a Studio without the read route
+  // creates from what the call says, exactly as before the route existed.
+  ctx.progress("Reading the draft…");
+  let draft: BoothDraftResult | null = null;
+  try {
+    draft = await readBoothDraft(studio, args.draftId);
+  } catch (err) {
+    // The draft itself being gone is final; anything else is a missing or
+    // slow route, and the call's own arguments are enough.
+    if (err instanceof StudioError && err.status === 404 && /not available to this account/i.test(err.message)) {
+      throw err;
+    }
+  }
+  const title = (args.title ?? draft?.title ?? "").trim();
+  const slug = (args.slug ?? draft?.slug ?? "").trim().toLowerCase();
+  if (title.length < 2 || slug.length < 3 || !SLUG_RE.test(slug)) {
+    throw new StudioError(
+      "The booth needs a title and a link name (slug) before it can be created, and the draft did not propose usable ones. Ask the operator and call create_booth again with both.",
+      400,
+      false
+    );
+  }
+
   // 1. The link name, before anything expensive.
   ctx.progress("Checking the link name…");
   let available: { available?: boolean };
   try {
     available = await get<{ available?: boolean }>("/api/projects/by-slug", {
-      slug: args.slug,
+      slug,
       checkOnly: "true",
     });
   } catch (err) {
@@ -139,41 +173,29 @@ export async function createBoothWork(
   }
   if (available?.available === false) {
     throw new StudioError(
-      `The booth link "${args.slug}" is already taken. Ask the operator for another and call create_booth again — the draft is untouched.`,
+      `The booth link "${slug}" is already taken. Ask the operator for another and call create_booth again — the draft is untouched.`,
       409,
       false
     );
   }
 
-  // 2. The AI effect, resolved by title to an id — the operator says a name.
+  // 2. The AI effect: a name from the call is resolved to an id; otherwise
+  // the one the draft was given with update_booth_draft; otherwise none.
   let aiEffectId: string | undefined;
   let aiEffectTitle: string | undefined;
   if (args.aiEffectTitle?.trim()) {
     ctx.progress("Looking up the AI effect…");
-    const wanted = args.aiEffectTitle.trim().toLowerCase();
-    let effects: EffectsReply;
-    try {
-      effects = await get<EffectsReply>("/api/ai-effects/catalog", {});
-    } catch (err) {
-      throw boothErrorFor(err, "create");
-    }
-    const hit = (effects?.items ?? []).find(
-      (e) => typeof e.title === "string" && e.title.trim().toLowerCase() === wanted
-    );
-    if (!hit?.id) {
-      const names = (effects?.items ?? [])
-        .map((e) => e.title)
-        .filter(Boolean)
-        .slice(0, 8)
-        .join(", ");
-      throw new StudioError(
-        `No AI effect called "${args.aiEffectTitle.trim()}" is available.${names ? ` Available: ${names}.` : ""} Leave it out, or ask the operator which one.`,
-        404,
-        false
-      );
-    }
+    const hit = await resolveAiEffect(studio, args.aiEffectTitle);
     aiEffectId = hit.id;
     aiEffectTitle = hit.title;
+  } else if (draft?.aiEffectId) {
+    aiEffectId = draft.aiEffectId;
+    try {
+      const effects = await get<EffectsReply>("/api/ai-effects/catalog", {});
+      aiEffectTitle = (effects?.items ?? []).find((e) => e.id === aiEffectId)?.title ?? "AI effect";
+    } catch {
+      aiEffectTitle = "AI effect";
+    }
   }
 
   // 3. The booth's own frames. Best-effort by the route's own contract: a
@@ -214,11 +236,20 @@ export async function createBoothWork(
       mode: "creator",
     });
     const pool = [...(reply?.mine ?? []), ...(reply?.items ?? [])].filter((f) => f && f._id);
-    starters = pickStarterFrames(pool, options.draftTerms ?? []);
+    starters = pickStarterFrames(
+      pool,
+      options.draftTerms ?? (draft ? [...draft.frameTags, draft.filterMood] : [])
+    );
   } catch {
     /* the drawn frames still lead server-side; a booth with no picks is fine */
   }
-  const frameIds = dedupe([...(args.frameIds ?? []), ...starters]).slice(0, 24);
+  // Named on the call, given to the draft, saved on this connection, starters.
+  const frameIds = dedupe([
+    ...(args.frameIds ?? []),
+    ...(draft?.frameIds ?? []),
+    ...(options.recentFrameIds ?? []),
+    ...starters,
+  ]).slice(0, 24);
 
   // 5. The Studio's default filter, as /new force-selects it, plus any named.
   ctx.progress("Picking filters…");
@@ -231,7 +262,13 @@ export async function createBoothWork(
   } catch {
     /* without the catalogue the operator's own picks still apply */
   }
-  const filterIds = dedupe([normalId, ...(args.filterIds ?? [])]).slice(0, 24);
+  // "Normal" first as /new does, then named, given to the draft, made here.
+  const filterIds = dedupe([
+    normalId,
+    ...(args.filterIds ?? []),
+    ...(draft?.filterIds ?? []),
+    ...(options.recentFilterIds ?? []),
+  ]).slice(0, 24);
 
   // 6. The booth. No `theme`: the route falls back to the draft's palette,
   // which is exactly what /new sends. Built field by field.
@@ -242,8 +279,8 @@ export async function createBoothWork(
       "/api/projects/onboarding",
       {
         mode: "creator",
-        title: args.title,
-        slug: args.slug,
+        title,
+        slug,
         draftId: args.draftId,
         captureMode: args.captureMode,
         aiEffectId,
@@ -256,16 +293,16 @@ export async function createBoothWork(
   } catch (err) {
     throw boothErrorFor(err, "create");
   }
-  const slug = created?.slug || args.slug;
+  const createdSlug = created?.slug || slug;
 
   // 7. The id, for a dashboard link that opens the editor, and the rendered
   // welcome thumbnail, for the card. Non-fatal: the booth exists either way,
   // the list page is a fine fallback, and the draft's welcome design stands
   // in for the thumbnail.
   let projectId: string | undefined;
-  let imageUrl: string | undefined = options.draftImage || undefined;
+  let imageUrl: string | undefined = options.draftImage || draft?.welcomePortraitUrl || undefined;
   try {
-    const doc = await get<{ _id?: string; thumbnail?: string }>("/api/projects/by-slug", { slug });
+    const doc = await get<{ _id?: string; thumbnail?: string }>("/api/projects/by-slug", { slug: createdSlug });
     if (doc?._id) projectId = String(doc._id);
     if (typeof doc?.thumbnail === "string" && doc.thumbnail.startsWith("https://")) {
       imageUrl = doc.thumbnail;
@@ -276,9 +313,9 @@ export async function createBoothWork(
 
   return {
     projectId,
-    slug,
-    title: args.title,
-    boothUrl: `${BOOTH_PUBLIC_ORIGIN}/${slug}`,
+    slug: createdSlug,
+    title,
+    boothUrl: `${BOOTH_PUBLIC_ORIGIN}/${createdSlug}`,
     dashboardUrl: projectId
       ? `${config.apiUrl}/dashboard/projects/${projectId}/editor`
       : `${config.apiUrl}/dashboard/projects`,
@@ -296,9 +333,9 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
     config: {
       title: "Create the booth",
       description:
-        "Create the booth from a finished draft — the step that makes something real, live at its public link. Call it only after the operator has seen the draft via check_generation and agreed the title and the link name (slug). " +
-        "It draws the booth's own three photo-strip frames from the draft (3 images, up to five minutes), adds three starter frames from the catalogue and the Studio's default 'Normal' filter the way dreambooth.app/new does, then creates the booth with the draft's welcome design, background, colour theme and capture mode. Frames saved with save_frame and filters made with create_filter in this conversation can be included by id. " +
-        "Returns a job id; check_generation reports progress and, when done, the booth's public link, id and a dashboard link. If the link name is taken it stops before drawing anything — ask for another and call again. " +
+        "Create the booth from a finished draft — the step that makes something real, live at its public link. Call it only after the operator has seen the draft via check_generation and agreed to create it; the title and link name (slug) default to the draft's unless the operator chose others. " +
+        "It reads the draft first (so everything set with update_booth_draft — settings, frames, filters, AI effect — is carried), checks the link name, draws the booth's own three photo-strip frames (3 images, up to five minutes), adds three starter frames from the catalogue and the Studio's default 'Normal' filter the way dreambooth.app/new does, then creates the booth with the draft's welcome design, background, colour theme and capture mode. Frames saved with save_frame and filters made with create_filter on this connection are carried automatically; ids can also be passed. " +
+        "Tell the operator it takes 2-6 minutes. Returns a job id; check_generation reports progress and, when done, the booth's public link, id and a dashboard link. If the link name is taken it stops before drawing anything — ask for another and call again. " +
         "Creating twice with different link names makes two booths. The booth is live (unlisted) at once; there is no tool that edits or deletes a booth — changes happen in the dashboard.",
       inputSchema: {
         draftId: z.string().regex(DRAFT_ID_RE).describe("The draft to create, from check_generation."),
@@ -306,14 +343,16 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
           .string()
           .min(2)
           .max(80)
-          .describe("The booth's name. The draft's title from check_generation unless the operator chose one."),
+          .optional()
+          .describe("The booth's name. Leave unset to use the draft's title (as shown by check_generation / set with update_booth_draft)."),
         slug: z
           .string()
           .min(3)
           .max(44)
           .regex(SLUG_RE)
+          .optional()
           .describe(
-            "The link name: lowercase letters, digits and single hyphens (dreambooth.app/<slug>). The draft's proposed slug from check_generation unless the operator chose one."
+            "The link name: lowercase letters, digits and single hyphens (dreambooth.app/<slug>). Leave unset to use the draft's proposed slug."
           ),
         captureMode: z
           .enum(["standard", "frame-based"])
@@ -339,7 +378,7 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
     },
     handler: async (args: CreateBoothArgs): Promise<CreateBoothHandle> => {
       const ownerKey = studio.ownerKey();
-      const what = args.title;
+      const what = args.title ?? "the booth";
       const failed = (error: string): CreateBoothHandle => ({
         kind: "booth" as const,
         jobId: "",
@@ -380,7 +419,13 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
         const job = jobs.start<BoothCreated>(
           ownerKey,
           what,
-          (ctx) => createBoothWork(studio, config, args, ctx, { draftTerms, draftImage }),
+          (ctx) =>
+            createBoothWork(studio, config, args, ctx, {
+              draftTerms,
+              draftImage,
+              recentFrameIds: recentCreations.list(ownerKey, "frame"),
+              recentFilterIds: recentCreations.list(ownerKey, "filter"),
+            }),
           { kind: "booth", maxRuntimeMs: CREATE_JOB_MAX_RUNTIME_MS, ref: args.draftId }
         );
 

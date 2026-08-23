@@ -200,7 +200,9 @@ That is the complete read set. Two more wrap a route that creates something:
 | `preview_filter` | `GET /api/filters/preview` | Bearer (read is enough) |
 | `start_booth` | `POST /api/onboarding/generate` | Bearer + `booths:write` |
 | `refine_booth` | `POST /api/onboarding/generate` (regen, or a rebuild) | Bearer + `booths:write` |
-| `create_booth` | `GET by-slug?checkOnly` → `POST /api/onboarding/draft-frames` → `GET /api/onboarding/frames` + `/catalog` (+ `/api/ai-effects/catalog`) → `POST /api/projects/onboarding` → `GET by-slug` | Bearer + `booths:write` |
+| `create_booth` | `GET /api/onboarding/draft` → `GET by-slug?checkOnly` → `POST /api/onboarding/draft-frames` → `GET /api/onboarding/frames` + `/catalog` (+ `/api/ai-effects/catalog`) → `POST /api/projects/onboarding` → `GET by-slug` | Bearer + `booths:write` |
+| `get_booth_draft` | `GET /api/onboarding/draft` | Bearer (read is enough) |
+| `update_booth_draft` | `PATCH /api/onboarding/draft` (+ `/api/ai-effects/catalog` when an effect is named) | Bearer + `booths:write` |
 
 > **Deploy order matters for the frame and booth tools.** They are listed
 > unconditionally — there is no flag — and they call Studio routes that are
@@ -236,7 +238,13 @@ Studio designs a whole booth from a sentence (spec, welcome screens for phone
 and laptop, in-booth background) and creates it. `start_booth` makes a DRAFT
 (a `draftId`, 60–120 s, a background job); `refine_booth` redraws the welcome
 screen or the in-booth background from an instruction, or rebuilds the whole
-draft from a new description; `create_booth` is the only step that makes a
+draft from a new description; `update_booth_draft` changes what a redraw
+cannot — title, link name, button text, colours, capture mode, language, which
+frames and filters it carries, its AI effect, and the page settings the
+dashboard editor offers (photo count, countdown, timeouts, GIF/recording,
+retake, checkout, payment, result) — stored on the draft and applied by the
+Studio at create; `get_booth_draft` reads the draft back once the job store has
+forgotten it (drafts live 7 days); `create_booth` is the only step that makes a
 booth — it checks the link name first, draws the booth's own three frames,
 picks three starter frames and the Studio's default filter the way /new does,
 and creates the booth with the draft's design, theme and capture mode. The
@@ -328,6 +336,8 @@ exists:
   exactly that; a host without `callTool` just leaves the card at "working".
 - `check_generation` shows the preview (frame image; booth draft with its
   welcome screen and palette; created booth with its thumbnail and links).
+  `get_booth_draft` and `update_booth_draft` render the same draft card, with
+  what was set and what could not be applied named on it.
 - `save_frame` shows the saved frame's thumbnail; `create_filter` shows the
   created filter on the Studio's sample photo (the same render `preview_filter`
   shows, fetched after the save — best-effort); `preview_filter` shows the

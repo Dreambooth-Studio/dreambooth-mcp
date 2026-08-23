@@ -108,6 +108,7 @@ test("preview and create share one adjustments schema, so what was seen is what 
 test("create_filter shows the saved filter on the sample photo, best-effort", async () => {
   const calls: Array<{ method: string; path: string }> = [];
   const studio = {
+    ownerKey: () => "owner-test",
     post: async (path: string) => {
       calls.push({ method: "POST", path });
       return { _id: "f1", name: "Senja Hangat", isPublic: false, adjustments: { contrast: 112, sepia: 18 } };
@@ -134,6 +135,7 @@ test("create_filter shows the saved filter on the sample photo, best-effort", as
 
 test("a filter is still created when the preview is unavailable", async () => {
   const studio = {
+    ownerKey: () => "owner-test",
     post: async () => ({ _id: "f2", name: "Mono", isPublic: false, adjustments: { grayscale: 100 } }),
     get: async () => {
       throw new StudioError("Nothing found at /api/filters/preview.", 404, false);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
+import { recentCreations } from "../creations/recent.js";
 import type { Config } from "../config.js";
 
 /**
@@ -95,6 +96,9 @@ export function buildSaveFrame(studio: StudioClient, config: Config) {
         name: args.name,
         isPublic: args.isPublic ?? false,
       });
+      // A booth created later in this conversation carries the frame
+      // (create_booth reads this), instead of relying on it leading the pool.
+      recentCreations.remember(studio.ownerKey(), "frame", saved?.frameId);
 
       return {
         kind: "frame" as const,

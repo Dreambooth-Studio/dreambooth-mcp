@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
+import { recentCreations } from "../creations/recent.js";
 import type { Config } from "../config.js";
 import { filterAdjustments as adjustments } from "./filterAdjustments.js";
 
@@ -76,6 +77,9 @@ export function buildCreateFilter(studio: StudioClient, config: Config) {
         adjustments: args.adjustments ?? {},
         isPublic: args.isPublic ?? false,
       });
+      // So a booth created later in this conversation carries it without the
+      // model having to remember the id (create_booth reads this).
+      recentCreations.remember(studio.ownerKey(), "filter", created?._id);
 
       /**
        * The look, for the card: the same render `preview_filter` shows, on the

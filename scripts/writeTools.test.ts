@@ -31,6 +31,7 @@ const CONFIG = {
 function fakeStudio(reply: unknown) {
   const calls: Array<{ path: string; body: unknown; query: unknown }> = [];
   const studio = {
+    ownerKey: () => "owner-test",
     post: async (path: string, body: unknown, query: unknown = {}) => {
       calls.push({ path, body, query });
       return reply;
