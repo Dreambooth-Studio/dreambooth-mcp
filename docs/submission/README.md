@@ -1,7 +1,7 @@
 # ChatGPT app submission — import file
 
-`build_submission_import.py` writes `chatgpt-app-submission.json` (gitignored)
-in the shape the portal's **Import** accepts — the schema in
+`build_submission_import.py` writes `chatgpt-app-submission.json` at the repo
+root (gitignored) in the shape the portal's **Import** accepts — the schema in
 `chatgpt-app-submission.v1.json` (`$schema`, `schema_version: 1`, `app_info`,
 `tools` keyed by action name with annotations + justifications, exactly five
 `test_cases` and three `negative_test_cases`). It also copies the file to
