@@ -48,7 +48,7 @@ export function buildDuplicateProject(studio: StudioClient, config: Config) {
     config: {
       title: "Duplicate a booth",
       description:
-        "Copy one of this operator's existing booths, with all of its settings, into a new one. Use it when they want another booth 'like' one they already run — a second location, a one-off event, a variant to experiment on. Call list_projects first to get the project id; the operator will name the booth, not its id. The copy is named after the original and is not published at the original's public address, so it is safe to make and they can rename it in the dashboard. There is no tool that creates a booth from nothing, and no tool that edits or deletes one.",
+        "Copy one of this operator's existing booths, with all of its settings, into a new one. Use it when they want another booth 'like' one they already run — a second location, a one-off event, a variant to experiment on. Call list_projects first to get the project id; the operator will name the booth, not its id. The copy is named after the original and is not published at the original's public address, so it is safe to make and they can rename it in the dashboard. To design a NEW booth from a description, use start_booth instead of this; there is no tool that edits or deletes a booth that already exists.",
       inputSchema: {
         projectId: z
           .string()
