@@ -32,6 +32,10 @@ export const AUTH_REQUIRED_TOOLS = new Set([
   "start_booth",
   "refine_booth",
   "create_booth",
+  "update_booth_draft",
+  // Read-only, but it reads the operator's draft from the Studio: a call
+  // without a token should start a sign-in, not answer "not connected".
+  "get_booth_draft",
   // Read-only, but it calls the Studio and exists only as the first half of
   // create_filter: a call without a token should start a sign-in, not answer
   // "not connected".

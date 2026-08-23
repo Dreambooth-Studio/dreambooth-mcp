@@ -95,6 +95,18 @@ export interface BoothDraftReply {
   };
   remaining?: { fullGenerations?: number; regens?: number };
   regeneratedOrientations?: string[];
+  /** GET/PATCH /api/onboarding/draft: what the draft was given in conversation. */
+  overrides?: {
+    settings?: Record<string, Record<string, boolean | number | null>>;
+    frameIds?: string[];
+    filterIds?: string[];
+    aiEffectId?: string | null;
+  } | null;
+  overridesSummary?: string[];
+  /** PATCH only. */
+  applied?: string[];
+  rejected?: Array<{ field: string; reason: string }>;
+  slugAvailable?: boolean;
 }
 
 /**
@@ -126,6 +138,13 @@ export interface BoothDraftResult {
   remainingRegens: number;
   /** Which welcome orientations a redraw touched ("portrait" / "landscape"). */
   regenerated?: string[];
+  /** What update_booth_draft gave the draft; absent until it has. */
+  frameIds?: string[];
+  filterIds?: string[];
+  aiEffectId?: string;
+  settings?: Record<string, Record<string, boolean | number | null>>;
+  /** Those, as short lines ("capture.captureCount=4", "2 filter(s) chosen"). */
+  edited?: string[];
 }
 
 /** A finished create job. */
@@ -184,12 +203,77 @@ export function summariseDraft(reply: BoothDraftReply): BoothDraftResult {
     remainingFullGenerations: reply.remaining?.fullGenerations ?? 0,
     remainingRegens: reply.remaining?.regens ?? 0,
     regenerated: reply.regeneratedOrientations,
+    ...draftEdits(reply),
   };
+}
+
+/** The conversation-time edits a draft carries, when the Studio reports any. */
+function draftEdits(reply: BoothDraftReply): Pick<BoothDraftResult, "frameIds" | "filterIds" | "aiEffectId" | "settings" | "edited"> {
+  const o = reply.overrides;
+  if (!o) return {};
+  const out: Pick<BoothDraftResult, "frameIds" | "filterIds" | "aiEffectId" | "settings" | "edited"> = {};
+  if (Array.isArray(o.frameIds) && o.frameIds.length) out.frameIds = o.frameIds.map(String);
+  if (Array.isArray(o.filterIds) && o.filterIds.length) out.filterIds = o.filterIds.map(String);
+  if (typeof o.aiEffectId === "string" && o.aiEffectId) out.aiEffectId = o.aiEffectId;
+  if (o.settings && Object.keys(o.settings).length) out.settings = o.settings;
+  if (Array.isArray(reply.overridesSummary) && reply.overridesSummary.length) out.edited = reply.overridesSummary.map(String);
+  return out;
+}
+
+/* ------------------------------------------------------------- the draft --- */
+
+/** Reading or editing a draft is one request; the Studio answers from the database. */
+export const DRAFT_READ_TIMEOUT_MS = 30_000;
+
+/**
+ * The draft as the Studio holds it — GET /api/onboarding/draft. Throws the
+ * booth-flavoured sentence for a missing draft, a missing route (Studio not
+ * updated) or a closed feature, so callers do not have to map those again.
+ */
+export async function readBoothDraft(studio: StudioClient, draftId: string): Promise<BoothDraftResult> {
+  let reply: BoothDraftReply;
+  try {
+    reply = await studio.get<BoothDraftReply>("/api/onboarding/draft", { draftId }, { timeoutMs: DRAFT_READ_TIMEOUT_MS });
+  } catch (err) {
+    throw boothErrorFor(err, "read");
+  }
+  return summariseDraft(reply);
+}
+
+/**
+ * An AI effect named by the operator, resolved to the catalogue entry — the
+ * operator says a title, the Studio wants an id. Throws the sentence that
+ * names what exists when nothing matches.
+ */
+export async function resolveAiEffect(studio: StudioClient, title: string): Promise<{ id: string; title: string }> {
+  const wanted = title.trim().toLowerCase();
+  let effects: { items?: Array<{ id?: string; title?: string }> };
+  try {
+    effects = await studio.get<{ items?: Array<{ id?: string; title?: string }> }>("/api/ai-effects/catalog", {});
+  } catch (err) {
+    throw boothErrorFor(err, "create");
+  }
+  const hit = (effects?.items ?? []).find(
+    (e) => typeof e.title === "string" && e.title.trim().toLowerCase() === wanted
+  );
+  if (!hit?.id) {
+    const names = (effects?.items ?? [])
+      .map((e) => e.title)
+      .filter(Boolean)
+      .slice(0, 8)
+      .join(", ");
+    throw new StudioError(
+      `No AI effect called "${title.trim()}" is available.${names ? ` Available: ${names}.` : ""} Leave it out, or ask the operator which one.`,
+      404,
+      false
+    );
+  }
+  return { id: hit.id, title: hit.title ?? title.trim() };
 }
 
 /* --------------------------------------------------------------- errors --- */
 
-export type BoothStage = "generate" | "refine" | "frames" | "create" | "lookup";
+export type BoothStage = "generate" | "refine" | "frames" | "create" | "lookup" | "read" | "edit";
 
 /**
  * Turns a Studio refusal on the booth routes into the sentence the operator
@@ -219,6 +303,13 @@ export function boothErrorFor(err: unknown, stage: BoothStage): StudioError {
       }
       return err;
     case 404:
+      if ((stage === "read" || stage === "edit") && /^nothing found at/i.test(m)) {
+        return new StudioError(
+          "This Dreambooth cannot read or edit booth drafts yet — the Studio update that adds it is not deployed. refine_booth and create_booth still work; give create_booth the title and link name directly.",
+          404,
+          false
+        );
+      }
       if (/^nothing found at/i.test(m) || /^not found\.?$/i.test(m)) {
         return new StudioError(
           "Booth generation is not enabled on this Dreambooth right now (the digital-mode feature is off). Nothing was generated.",

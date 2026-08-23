@@ -28,7 +28,7 @@ import type { BoothCreated, BoothDraftResult } from "./boothGeneration.js";
  * without asking, which is what makes polling tolerable.
  */
 
-const BOOTH_DRAFT_OUTPUT = z.object({
+export const BOOTH_DRAFT_OUTPUT = z.object({
   draftId: z.string(),
   slug: z.string(),
   title: z.string(),
@@ -52,6 +52,12 @@ const BOOTH_DRAFT_OUTPUT = z.object({
   remainingFullGenerations: z.number(),
   remainingRegens: z.number(),
   regenerated: z.array(z.string()).optional(),
+  // What update_booth_draft gave the draft, when anything.
+  frameIds: z.array(z.string()).optional(),
+  filterIds: z.array(z.string()).optional(),
+  aiEffectId: z.string().optional(),
+  settings: z.record(z.record(z.union([z.boolean(), z.number(), z.null()]))).optional(),
+  edited: z.array(z.string()).optional(),
 });
 
 const BOOTH_CREATED_OUTPUT = z.object({
@@ -131,6 +137,7 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
       title: "Check background work",
       description:
         "Report on background work started by start_frame, refine_frame, start_booth, refine_booth or create_booth. Call it with the jobId that returned, or with no arguments for the most recent job on this connection of any kind. " +
+        "Designing a booth takes 1-3 minutes, a redraw about a minute, creating a booth 2-6 minutes: tell the operator that, then poll about every 15 seconds. " +
         "While it says 'running', nothing exists yet — relay the progress line if there is one, tell the operator it is still going, and wait 10-15 seconds before calling again rather than polling tightly. " +
         "When it says 'done': a frame job carries imageUrl, threadId and generationId (a preview — nothing saved until save_frame); a booth design carries draft{…} (a draft — nothing created until create_booth); a booth creation carries booth{slug, boothUrl, projectId} — the one case where something now exists. " +
         "This reads a status and creates nothing, so it is always safe to call.",
@@ -196,7 +203,9 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
           draft,
           note:
             "This is a draft, not a booth: show the operator the welcome preview and the title. " +
-            "refine_booth changes it (redraws are limited per draft); create_booth makes it real — the title and link name are chosen then.",
+            "update_booth_draft changes its title, button text, colours, capture settings, language, frames, filters and AI effect without a redraw; " +
+            "refine_booth redraws the welcome or background (redraws are limited per draft); create_booth makes it real — it takes the draft's title and link name unless the operator chose others. " +
+            "get_booth_draft reads the draft back later.",
         };
       }
 

@@ -120,6 +120,8 @@ export class StudioClient {
    * change here and a much larger one everywhere else: the consent screen, the
    * directory listing and the scope's own name all say this connector creates
    * and does not manage. Whoever needs the method should change those first.
+   * (`patch` below is the one exception, and it edits only a booth DRAFT —
+   * something that does not exist as a booth yet — never a created thing.)
    */
   async post<T>(
     path: string,
@@ -184,6 +186,61 @@ export class StudioClient {
 
     if (!res.ok) throw await writeErrorFor(res, path);
 
+    return (await res.json()) as T;
+  }
+
+  /**
+   * Edits a booth draft — `PATCH /api/onboarding/draft` — and nothing else.
+   *
+   * A draft is not a booth: it is the design a conversation is still arguing
+   * with, and the Studio only ever reads it at create time. So this does not
+   * widen what the connector can change in an operator's account; it lets the
+   * conversation set what `create_booth` would otherwise take from defaults.
+   * Same credential rule as `post` (an OAuth token carrying booths:write), the
+   * same write-error translation, and the same "may have gone through" timeout
+   * — repeated, an edit is idempotent, so that one is merely a note here.
+   */
+  async patch<T>(
+    path: string,
+    body: unknown,
+    query: Record<string, string | undefined> = {},
+    options: { timeoutMs?: number } = {}
+  ): Promise<T> {
+    const token = this.requireToken();
+    const url = new URL(this.config.apiUrl + path);
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") url.searchParams.set(key, value);
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      options.timeoutMs ?? this.config.requestTimeoutMs
+    );
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new StudioError(
+          "Dreambooth did not answer in time; the edit may still have landed. Read the draft back with get_booth_draft before repeating it.",
+          504,
+          false
+        );
+      }
+      throw studioErrorFor(503, path);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw await writeErrorFor(res, path);
     return (await res.json()) as T;
   }
 

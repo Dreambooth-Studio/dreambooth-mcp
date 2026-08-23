@@ -45,6 +45,8 @@ const CONFIG = {
 } as unknown as Config;
 
 const BOOTH_TOOLS = ["start_booth", "refine_booth", "create_booth"];
+/** The two levers on a draft that create nothing: read it back, change its settings. */
+const DRAFT_TOOLS = ["get_booth_draft", "update_booth_draft"];
 const DRAFT_ID = `dft_${"a".repeat(24)}`;
 const HEX24 = (c: string) => c.repeat(24);
 
@@ -133,13 +135,13 @@ async function toolNames(bearerAuth: boolean): Promise<string[]> {
 
 test("the booth tools and preview_filter live on the OAuth path only", async () => {
   const withBearer = await toolNames(true);
-  for (const name of [...BOOTH_TOOLS, "preview_filter"]) assert.ok(withBearer.includes(name), name);
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) assert.ok(withBearer.includes(name), name);
   const anonymous = await toolNames(false);
-  for (const name of [...BOOTH_TOOLS, "preview_filter"]) assert.ok(!anonymous.includes(name), name);
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) assert.ok(!anonymous.includes(name), name);
 });
 
 test("all of them are listed as needing auth, so a call without one starts a sign-in", () => {
-  for (const name of [...BOOTH_TOOLS, "preview_filter"]) {
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) {
     assert.ok(AUTH_REQUIRED_TOOLS.has(name), name);
     const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
     assert.equal(requiresAuth(call), true, name);
@@ -165,9 +167,18 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     assert.equal(tool?.annotations?.readOnlyHint, false, name);
     assert.equal(tool?.annotations?.idempotentHint, false, name);
   }
-  for (const name of ["preview_filter", "check_generation"]) {
+  for (const name of ["preview_filter", "check_generation", "get_booth_draft"]) {
     const tool = listed.tools.find((t) => t.name === name);
     assert.equal(tool?.annotations?.readOnlyHint, true, name);
+  }
+  // Editing a draft changes it (not read-only) but replaces nothing published
+  // (not destructive), and the same edit twice leaves the same draft.
+  {
+    const tool = listed.tools.find((t) => t.name === "update_booth_draft");
+    assert.equal(tool?.annotations?.readOnlyHint, false);
+    assert.equal(tool?.annotations?.destructiveHint, false);
+    assert.equal(tool?.annotations?.idempotentHint, true);
+    assert.equal(tool?.annotations?.openWorldHint, false);
   }
 
   // A booth is visible from the moment it is asked for: the start, refine and
@@ -176,7 +187,7 @@ test("booth tools create; preview_filter and check_generation do not", async () 
   // created filter — with its real preview image.
   const meta = (name: string) =>
     (listed.tools.find((t) => t.name === name) as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {};
-  for (const name of [...BOOTH_TOOLS, "preview_filter", "create_filter"]) {
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter", "create_filter"]) {
     assert.equal(meta(name)["openai/outputTemplate"], "ui://widget/generation.html", name);
   }
 });
@@ -418,6 +429,8 @@ function happyCreate(overrides: Partial<Record<string, Reply>> = {}): Reply {
     const custom = overrides[key];
     if (custom) return custom(method, path, body, query);
     switch (key) {
+      case "GET /api/onboarding/draft":
+        return { ...DRAFT_REPLY, overrides: null, overridesSummary: [] };
       case "GET /api/projects/by-slug?checkOnly":
         return { available: true };
       case "GET /api/ai-effects/catalog":
@@ -464,6 +477,7 @@ test("create_booth runs /new's last screens in order and sends no theme", async 
   assert.deepEqual(
     calls.map((c) => `${c.method} ${c.path}`),
     [
+      "GET /api/onboarding/draft",
       "GET /api/projects/by-slug",
       "GET /api/ai-effects/catalog",
       "POST /api/onboarding/draft-frames",
@@ -473,10 +487,11 @@ test("create_booth runs /new's last screens in order and sends no theme", async 
       "GET /api/projects/by-slug",
     ]
   );
-  assert.equal(calls[0].query?.checkOnly, "true", "the link name is checked first");
-  assert.equal(calls[2].options?.timeoutMs, DRAFT_FRAMES_TIMEOUT_MS);
+  assert.equal(calls[0].query?.draftId, DRAFT_ID, "the draft is read first, for what it was given");
+  assert.equal(calls[1].query?.checkOnly, "true", "the link name is checked before anything expensive");
+  assert.equal(calls[3].options?.timeoutMs, DRAFT_FRAMES_TIMEOUT_MS);
 
-  const create = calls[5].body as Record<string, unknown>;
+  const create = calls[6].body as Record<string, unknown>;
   assert.equal(create.mode, "creator");
   assert.equal(create.title, "Bandung Wedding");
   assert.equal(create.slug, "bandung-wedding");
@@ -489,7 +504,7 @@ test("create_booth runs /new's last screens in order and sends no theme", async 
   assert.deepEqual(create.frameIds, [HEX24("c"), HEX24("1"), HEX24("3"), HEX24("2")]);
   // The Studio's "Normal" leads the filters, then the operator's own.
   assert.deepEqual(create.filterIds, [HEX24("f"), HEX24("d")]);
-  assert.equal(calls[5].options?.timeoutMs, BOOTH_CREATE_TIMEOUT_MS);
+  assert.equal(calls[6].options?.timeoutMs, BOOTH_CREATE_TIMEOUT_MS);
 
   assert.equal(result.slug, "bandung-wedding");
   assert.equal(result.projectId, HEX24("b"));
@@ -512,7 +527,7 @@ test("a taken link name stops the create before anything is drawn", async () => 
     () => createBoothWork(studio, CONFIG, CREATE_ARGS, ctxOf([]), { pollSleep: noSleep }),
     (err: unknown) => err instanceof StudioError && /already taken/.test(err.message) && /untouched/.test(err.message)
   );
-  assert.equal(calls.length, 1, "no frames drawn, no booth created");
+  assert.equal(calls.length, 2, "the draft read and the link check only: no frames drawn, no booth created");
 });
 
 test("an unknown AI effect stops the create and names what exists", async () => {
@@ -524,7 +539,7 @@ test("an unknown AI effect stops the create and names what exists", async () => 
       }),
     (err: unknown) => err instanceof StudioError && /No AI effect called "Sparkle"/.test(err.message) && /Anime Glow/.test(err.message)
   );
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
 });
 
 test("frames still drawing are polled, then used; unavailable frames are not fatal", async () => {
@@ -672,6 +687,7 @@ test("every booth and filter-preview result satisfies the published output schem
     const created = await call("create_booth", { draftId: DRAFT_ID, title: "Bandung Wedding", slug: "bandung-wedding" });
     assert.equal(created.isError, undefined);
     assert.equal(created.structuredContent?.state, "running");
+    await releaseNext({ ...DRAFT_REPLY, overrides: null, overridesSummary: [] });
     await releaseNext({ available: true });
     await releaseNext({ frames: [{}, {}, {}], status: "ready" });
     await releaseNext({ items: [{ _id: HEX24("2"), name: "Classic White" }], mine: [] });
@@ -695,6 +711,40 @@ test("every booth and filter-preview result satisfies the published output schem
     assert.equal(preview.isError, undefined);
     assert.equal(preview.structuredContent?.kind, "filter-preview");
     assert.match(String(preview.structuredContent?.note), /shadows/);
+
+    // Read the draft back, and edit it: both answer with the draft shape.
+    const readPromise = call("get_booth_draft", { draftId: DRAFT_ID });
+    await releaseNext({
+      ...DRAFT_REPLY,
+      overrides: { settings: { capture: { captureCount: 4 } }, filterIds: [HEX24("d")] },
+      overridesSummary: ["capture.captureCount=4", "1 filter(s) chosen"],
+    });
+    const read = await readPromise;
+    assert.equal(read.isError, undefined, JSON.stringify(read));
+    assert.equal(read.structuredContent?.kind, "booth-draft");
+    assert.deepEqual((read.structuredContent?.draft as { edited?: string[] })?.edited, ["capture.captureCount=4", "1 filter(s) chosen"]);
+
+    const editPromise = call("update_booth_draft", {
+      draftId: DRAFT_ID,
+      buttonText: "Mulai",
+      settings: { capture: { captureCount: 4 }, checkout: { promoEnabled: false } },
+      slug: "taken-slug",
+    });
+    await releaseNext({
+      ...DRAFT_REPLY,
+      overrides: { settings: { capture: { captureCount: 4 }, checkout: { promoEnabled: false } } },
+      overridesSummary: ["capture.captureCount=4", "checkout.promoEnabled=false"],
+      applied: ["cta", "settings.capture.captureCount", "settings.checkout.promoEnabled"],
+      rejected: [{ field: "slug", reason: "is already taken; choose another link name" }],
+      slugAvailable: false,
+    });
+    const edited = await editPromise;
+    assert.equal(edited.isError, undefined, JSON.stringify(edited));
+    assert.equal(edited.structuredContent?.state, "done");
+    assert.deepEqual(edited.structuredContent?.applied, ["cta", "settings.capture.captureCount", "settings.checkout.promoEnabled"]);
+    assert.equal((edited.structuredContent?.rejected as unknown[])?.length, 1);
+    assert.equal(edited.structuredContent?.slugAvailable, false);
+    assert.match(String(edited.structuredContent?.note), /Not applied: slug/);
 
     // Unknown, and the most-recent-job form.
     const unknown = await call("check_generation", { jobId: "not-a-real-job" });

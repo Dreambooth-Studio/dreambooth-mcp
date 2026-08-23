@@ -24,6 +24,8 @@ import { buildSaveFrame } from "../tools/saveFrame.js";
 import { buildStartBooth } from "../tools/startBooth.js";
 import { buildRefineBooth } from "../tools/refineBooth.js";
 import { buildCreateBooth } from "../tools/createBooth.js";
+import { buildGetBoothDraft } from "../tools/getBoothDraft.js";
+import { buildUpdateBoothDraft } from "../tools/updateBoothDraft.js";
 import { buildPreviewFilter } from "../tools/previewFilter.js";
 import { registerWidget, withWidget, widgetAccessible } from "./widgets.js";
 import {
@@ -146,6 +148,19 @@ const CREATES = {
   readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
+/**
+ * update_booth_draft: not read-only (it changes a draft), not destructive
+ * (the draft is not a booth, and the edit replaces nothing an operator has
+ * published), idempotent (the same edit twice leaves the same draft — unlike
+ * the creates above), and closed-world like everything here.
+ */
+const EDITS_DRAFT = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
   openWorldHint: false,
 } as const;
 
@@ -502,6 +517,33 @@ export function createServer(
         { invoking: "Membuat booth…", invoked: "Sedang membuat booth" },
       ),
       safe(createBooth.handler),
+    );
+
+    /**
+     * The other two levers on a draft: read it back (the job store forgets,
+     * the Studio does not) and change what a redraw cannot — settings, text,
+     * colours, frames, filters, effect — before create_booth applies them.
+     */
+    const getBoothDraft = buildGetBoothDraft(studio);
+    server.registerTool(
+      getBoothDraft.name,
+      withWidget(
+        { ...getBoothDraft.config, annotations: READ_ONLY },
+        GENERATION_WIDGET_URI,
+        { invoking: "Membaca rancangan…", invoked: "Rancangan booth" },
+      ),
+      safe(getBoothDraft.handler),
+    );
+
+    const updateBoothDraft = buildUpdateBoothDraft(studio);
+    server.registerTool(
+      updateBoothDraft.name,
+      withWidget(
+        { ...updateBoothDraft.config, annotations: EDITS_DRAFT },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengubah rancangan…", invoked: "Rancangan diperbarui" },
+      ),
+      safe(updateBoothDraft.handler),
     );
   }
 
