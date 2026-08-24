@@ -10,21 +10,29 @@ alasan-alasan yang dicatat sebelum kodenya ada.
 
 ## Apa yang berubah sejak rancangan ini ditulis
 
+Ditinjau ulang **2026-08-24** terhadap `dreambooth-mcp @ origin/main`. Dua bagian
+sudah dilewati kenyataan sejauh menyesatkan kalau dibaca sebagai spesifikasi —
+§5 (auth) dan §7 (tool) — jadi keduanya dicatat eksplisit di bawah.
+
 | Bagian | Keadaan sekarang |
 |---|---|
 | §5–§8 (service, transport, auth) | Terbangun dan hidup di `https://mcp.dreamboothstudio.com/mcp`, terbit di registry sebagai `com.dreamboothstudio/dreambooth` |
 | §6 (3 migrasi route + `GET /api/me/revenue-summary`) | **Selesai** — `dreambooth` PR #563 |
-| §7 (8 tool) | Terlampaui: 11 tool terpasang, termasuk `connect_account`, `connection_status`, `session_info` yang belum ada di rancangan ini |
+| §7 (8 tool, “semuanya baca”) | **Terlampaui jauh, dan asumsi read-only-nya batal.** 26 berkas tool di `src/tools/`, termasuk tool **tulis**: `create_booth`, `save_frame`, `create_filter`, `duplicate_project`, `update_booth_draft`. Ada juga alur berulir yang tidak terbayang di sini: `start_frame`/`refine_frame`/`check_generation` dan `start_booth`/`refine_booth`. `get_balance` kini bernama `get_wallet_transactions`. |
+| §5 (model auth) | **Bukan lagi sekadar JWT NextAuth telanjang.** OAuth 2.1 sudah jalan: metadata protected-resource (`src/mcp/wellKnown.ts`), tantangan `WWW-Authenticate` (`src/auth/challenge.ts`), dan scope betulan di `src/auth/scopes.ts` — `booths:read` dan `booths:write`. Studio tetap authorization server dan tetap pemegang otoritas daftar scope (`lib/oauth/tokens.ts`). |
 | §10 no. 1 (repo di bawah org) | Terjawab: `Dreambooth-Studio/dreambooth-mcp` |
 | §10 no. 2 (subdomain) | Terjawab: `mcp.dreamboothstudio.com` |
 
 Yang **belum** berubah dan masih berlaku apa adanya:
 
-- **§5 — `sessionToken` itu JWT NextAuth**: setara sesi penuh, umur 1 tahun, tanpa scope,
-  tanpa pencabutan, tanpa audit per-token. Masih cukup untuk pilot tertutup, masih **tidak
-  cukup** untuk listing connector publik.
 - **§10 no. 3 — dua lubang auth pre-existing** (`POST /api/auth/token` dan
-  `POST /api/projects/token`). Masih blocker Fase 3, bukan kerja paralel.
+  `POST /api/projects/token`). Keduanya masih ada di `main` per 2026-08-24. Masih
+  blocker Fase 3, bukan kerja paralel.
+
+> **§5 dan §7 dibaca sebagai sejarah, bukan sebagai keadaan sekarang.** Kalimat
+> “delapan, semuanya baca” di §7 dan “tanpa scope, tanpa pencabutan” di §5 ditulis
+> sebelum tool tulis dan sebelum OAuth ada. Yang masih bernilai di sana adalah
+> alasan kenapa saat itu dianggap cukup — bukan angkanya.
 
 ---
 
