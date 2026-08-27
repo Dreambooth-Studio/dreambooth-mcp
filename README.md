@@ -4,12 +4,30 @@ MCP server for Dreambooth Studio. Lets ChatGPT, Claude and Gemini answer an
 operator's questions about their own booths — "how did my Bandung booth do this
 week?" — by wrapping the Studio API the dashboard already uses.
 
-**Status: Phase 1, live at `https://mcp.dreamboothstudio.com/mcp`.** Streamable
-HTTP + stdio, eight read-only tools, two that create something (a third is
-flag-gated, see below), and account
-connection through the Studio's existing OAuth device flow. Listed in the official MCP Registry as
+**Status: live at `https://mcp.dreamboothstudio.com/mcp`** (server `0.3.0`).
+Streamable HTTP + stdio, **23 tools** — 13 read-only, 9 that create or edit
+something, and `connect_account`. Listed in the official MCP Registry as
 [`com.dreamboothstudio/dreambooth`](https://registry.modelcontextprotocol.io/v0.1/servers?search=com.dreamboothstudio/dreambooth)
-v0.1.0.
+v0.1.0 (registry versions are immutable, so that entry stays at 0.1.0).
+
+**Ten tools are always registered**, on stdio and on every HTTP session:
+
+| | |
+|---|---|
+| `connect_account` | starts the device flow |
+| read | `connection_status` · `get_sessions` · `get_gallery_stats` · `search_docs` |
+| read | `list_projects` · `get_project` · `get_revenue_summary` · `get_credits` · `get_wallet_transactions` |
+
+`session_info` is an eleventh, registered only when `MCP_DIAGNOSTICS=1`.
+
+**Twelve more appear only on an OAuth session** (see the gate below):
+
+| | |
+|---|---|
+| creates | `create_booth` · `start_booth` · `refine_booth` · `create_filter` · `duplicate_project` |
+| creates | `start_frame` · `refine_frame` · `save_frame` |
+| edits | `update_booth_draft` |
+| read | `get_booth_draft` · `check_generation` · `preview_filter` |
 
 Phase 3 hardening has since **landed**, on the OAuth path: the Studio runs a
 full OAuth 2.1 authorization server — PKCE S256 only, one-hour access tokens,
@@ -19,8 +37,14 @@ being granted. This server is a protected resource in front of it (RFC 9728).
 Both discovery documents are live.
 
 The **device flow is the older path and keeps the older properties** — its
-token is a year long, unscoped and unrevocable. That asymmetry is the reason
-the two write tools are registered only on the OAuth path; see
+token is a year long, unscoped and unrevocable. That asymmetry is the whole
+gate: the twelve tools above are registered only when the session carries a
+bearer token (`session.bearerAuth`), so on stdio and on a device-flow session a
+model cannot promise something the Studio would refuse. There is **no feature
+flag** in this — an earlier version of this README described one, and it was
+removed; deploy order is what guards a new tool. The gate checks for a token,
+not for its scope: a read-scoped OAuth connection still *sees* the write tools
+and gets a 403 on calling one, with a sentence naming the fix. See
 [Connecting an account](#connecting-an-account).
 
 Design: [`docs/dreambooth-mcp-design.md`](../dreambooth-prod/docs/dreambooth-mcp-design.md)
@@ -283,10 +307,19 @@ the other one. The Studio enforces the same rule independently — see
 `utils/resolveAuthSession.ts` there, and [`docs/write-tools-plan.md`](docs/write-tools-plan.md)
 for why the gate here cannot check the scope itself.
 
-Nothing edits, nothing deletes, and nothing touches money. There is no `put` or
-`delete` on `StudioClient`, and the Studio opened exactly eight POST handlers to it.
+Nothing deletes and nothing touches money. There is no `put` or `delete` on
+`StudioClient`; the Studio opened exactly eight POST handlers to it —
+`/api/filters`, `/api/projects`, `/api/projects/onboarding`,
+`/api/onboarding/generate`, `/api/onboarding/draft-frames`,
+`/api/ai/frames/start`, `/api/ai/frames/from-generation`, and
+`/api/ai/threads/{id}/messages`.
 
-Two more tools exist that wrap nothing:
+One thing **does** edit: `update_booth_draft` PATCHes `/api/onboarding/draft`,
+the single `patch` on `StudioClient`. It changes a draft that has not become a
+booth yet — drafts live 7 days and `create_booth` is still the only step that
+makes a real booth — but "nothing edits" stopped being true when it shipped.
+
+Two tools wrap nothing:
 `connection_status` (is this session authenticated — polled by the connect card)
 and `session_info` (diagnostics, **temporary**, and registered only when
 `MCP_DIAGNOSTICS=1`; delete it once the session-continuity question in the
