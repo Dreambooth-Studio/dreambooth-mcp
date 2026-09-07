@@ -42,7 +42,7 @@ export function buildConnectAccount(
     config: {
       title: "Connect or create a Dreambooth account",
       description:
-        "Connect this conversation to a Dreambooth Studio account. Returns a link the person opens in their own browser to approve with Google. Works for people who do NOT have a Dreambooth account yet — approving creates one, with a 14-day Pro trial — as well as for existing operators. Call this when another tool reports that no account is connected, or when someone asks to connect, sign up, or switch accounts. After returning the link, ask them to open it and say when they are done; do not call this tool again while waiting.",
+        "Connect this conversation to a Dreambooth Studio account. Returns a link the person opens in their own browser, where they sign in to Dreambooth with an email and password or with Google, and approve. Works for people who do NOT have a Dreambooth account yet — approving creates one, with a 14-day Pro trial — as well as for existing operators. Call this when another tool reports that no account is connected, or when someone asks to connect, sign up, or switch accounts. After returning the link, ask them to open it and say when they are done; do not call this tool again while waiting.",
       inputSchema: {},
       outputSchema: connectAccountOutput,
     },
@@ -84,7 +84,7 @@ export function buildConnectAccount(
         // Said explicitly because the model otherwise tends to poll by calling
         // the tool again, which starts a second flow and invalidates the first.
         message:
-          "Give them this link to open in their browser and approve with Google. If they do not have a Dreambooth account yet, approving creates one with a 14-day Pro trial. Do not call this tool again while waiting — once they have approved, the other tools simply start working.",
+          "Give them this link to open in their browser: they sign in with an email and password or with Google, then approve. If they do not have a Dreambooth account yet, approving creates one with a 14-day Pro trial. Do not call this tool again while waiting — once they have approved, the other tools simply start working.",
         expiresInMinutes: 5,
         createsAccountIfNeeded: true,
       };
