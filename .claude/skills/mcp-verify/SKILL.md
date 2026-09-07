@@ -20,8 +20,20 @@ So a tool that returns an error proves *nothing* about its schema, its data, or 
 1. `scripts/probe.mjs <baseUrl>` — everything checkable without an account
 2. `scripts/connect.mjs <baseUrl>` — device-flow sign-in, prints a session id
 3. `scripts/run-tools.mjs <baseUrl> <sessionId> <tool>...` — the authenticated tools
+4. `scripts/oauth-write-check.mjs <baseUrl> [--booth] [--capture <dir>]` — the
+   real OAuth path, and the only proof the write tools can write
+5. `scripts/scope-default-check.mjs <baseUrl>` — the same path with **no scope
+   requested**
 
 Step 3 is the one people skip and the one that finds real bugs.
+
+**Step 5 exists because step 4 cannot find its own blind spot.** `oauth-write-check`
+names `scope=booths:read booths:write`, so it walks the one path that works. A
+directory review found what it could not: an omitted `scope` was defaulted to
+read-only while the server still advertised its write tools to that token, so the
+connector promised nine creations and refused all nine. Any check that names the
+scope will pass while that is true. Ask what an unconfigured client gets, not
+only what a correctly configured one gets.
 
 ## What to check, and why each matters
 
