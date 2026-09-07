@@ -33,4 +33,19 @@ chatgpt-skills/*.zip
 # Submission screenshots, rendered from .preview by headless Chrome. Build
 # output like .preview itself — regenerate with npm run preview and the
 # render step rather than committing PNGs.
-.screenshots/
+#
+# The scripts that BUILD them are tracked, though. Ignoring them too is how the
+# 706x860 sizing rule and the scale-to-fit fix ended up living only in a session
+# scratchpad, which is how the v2.0.0 screenshots were rejected twice for the
+# same reason. Images, captured responses and source assets stay out.
+.screenshots/**
+!.screenshots/README.md
+!.screenshots/build/
+!.screenshots/build/*.ts
+!.screenshots/build/*.js
+
+# ChatGPT app submission: the generated import file and the portal's exports.
+# The exports carry the reviewer account's credentials; the import file is
+# rebuilt from docs/submission/build_submission_import.py.
+chatgpt-app-submission.json
+dreambooth-studio-*.json

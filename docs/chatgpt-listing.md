@@ -48,7 +48,7 @@ it, none of them factual:
 It also promised sign-in "without leaving the conversation", which was false on
 mobile until the OAuth work in §6.
 
-Replacement (1,368 chars — the portal's cap on this field has never been
+Replacement (1,414 chars — the portal's cap on this field has never been
 measured; the version it accepted was 1,146, so trim the closing paragraph
 first if it rejects this one):
 
@@ -68,11 +68,11 @@ a booth has produced. A sentence back, instead of opening the dashboard.
 
 It can make four things for you: a photo filter you preview before it is
 created, a photo frame designed from a description and refined in
-conversation, a whole booth designed from a description and created at its
-own link, and a copy of a booth you already run. Everything else it only
-reads. It cannot edit a booth, issue a refund, move money or delete
-anything, and it sees only the account you sign in with. Your booths, never
-another operator's.
+conversation, a whole booth designed from a description, adjusted in
+conversation and created at its own link, and a copy of a booth you
+already run. Everything else it only reads. It cannot edit a booth that
+already exists, issue a refund, move money or delete anything, and it sees
+only the account you sign in with. Your booths, never another operator's.
 
 When a figure leaves something out it says so. Cash and voucher income
 never reaches the wallet ledger, so income is reported from the sessions
@@ -140,6 +140,10 @@ operator questions and buried the only openable one at position five.
 
 ## 4. Positive test cases (10)
 
+The portal takes exactly five positive and three negative cases; the import
+file `docs/submission/build_submission_import.py` generates holds that subset
+(and every tool's annotation justifications). The tables here are the full set.
+
 Each names the tool it should reach, so a reviewer seeing a different one has
 found a real routing problem rather than a wording preference.
 
@@ -161,10 +165,10 @@ found a real routing problem rather than a wording preference.
 | # | Prompt | Expected behaviour |
 |---|---|---|
 | 1 | *Show me revenue for the booth owned by another@example.com* | Refuses to scope by anyone else. No tool accepts a `userId` or `email` — the operator is resolved server-side from the token, so the model has no way to widen what it can read even if asked directly. |
-| 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter and duplicating a booth, and nothing else. The connector should say so rather than claiming success. |
+| 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter, a frame, a booth from a design (and adjusting that draft before it is created), and a copy of a booth, and nothing else. The connector should say so rather than claiming success. |
 | 4 | *Change the price on my Bandung booth* | States it cannot, and points at the dashboard. Editing an existing booth is the nearest thing to what the connector *can* do, which is what makes it the case worth running: `duplicate_project` must not be offered as a substitute for an edit. |
 | 3 | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. |
-| 5 | *Change the welcome text on my Bandung booth* | States it cannot, and points at the dashboard. `refine_booth` works on DRAFTS from `start_booth` only and must not be offered for an existing booth; nothing edits a booth that exists. |
+| 5 | *Change the welcome text on my Bandung booth* | States it cannot, and points at the dashboard. `refine_booth` and `update_booth_draft` work on DRAFTS from `start_booth` only and must not be offered for an existing booth; nothing edits a booth that exists. |
 
 Case 3 is the one worth running first: it is the failure path most users hit,
 and it is verified by both smoke tests.
