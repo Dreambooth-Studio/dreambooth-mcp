@@ -98,24 +98,55 @@ function safe<A>(handler: (args: A) => Promise<unknown>) {
 /**
  * Every v1 tool is read-only; say so, so clients can auto-approve them.
  *
- * `openWorldHint: false` because each tool talks to exactly one known service —
- * this operator's own Studio account — and never to an open set of external
- * entities the way a web search would. Both directory reviews require the hint
- * to be present and explicit, and "absent" is not the same claim as "false".
+ * `openWorldHint` was `false` on every tool until the v2.0.0 review, on the MCP
+ * spec's reading of it: one known service is a closed world, unlike web search.
+ * The plugin guidelines define the same hint by a different test — "tools that
+ * interact with external systems, accounts, public platforms, or create
+ * publicly-visible content must be explicitly labeled" — and by THAT test the
+ * old answer was wrong for almost everything here. Reaching a named operator's
+ * account on another company's service is exactly the interaction the hint is
+ * meant to disclose, and `create_booth` publishes a page anyone can open.
+ *
+ * So the hint now answers the guidelines' question, not the spec's: `true`
+ * whenever the tool leaves this process, `false` only for the two that never
+ * do. Where the two readings disagree, the honest and the cautious answer are
+ * the same one, which is a good sign it is the right one.
  */
 /**
- * `destructiveHint: false` is included even though the MCP spec treats it as
- * meaningful only when `readOnlyHint` is false — a tool that reads nothing away
- * cannot destroy anything, so the spec considers it redundant here.
+ * `destructiveHint` and `idempotentHint` are included even though the MCP spec
+ * treats both as meaningful only when `readOnlyHint` is false — a tool that
+ * reads nothing away cannot destroy anything and cannot accumulate an effect,
+ * so the spec considers them redundant here.
  *
  * The ChatGPT submission portal disagrees and rejects any tool missing any of
- * the three, redundant or not. It is also the more useful claim to a reviewer:
+ * the four, redundant or not. It is also the more useful claim to a reviewer:
  * "absent" and "false" read identically to a person but mean different things
- * to a form.
+ * to a form. Omitting `idempotentHint` is what the v2.0.0 review flagged as an
+ * annotation that "does not match the tool's behavior" — the portal read the
+ * unset hint as an unanswered question, not as a redundant one.
+ *
+ * `idempotentHint: true` is the honest value and not merely the required one:
+ * asking any of these tools the same question twice returns the same answer and
+ * leaves the account exactly as it was. The data underneath may move between
+ * calls — that is the account changing, not the tool changing it.
  */
 const READ_ONLY = {
   readOnlyHint: true,
   destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+} as const;
+
+/**
+ * The two tools that reach nothing: `connection_status` reports the credential
+ * state of the request in hand, and `check_generation` reads a job record from
+ * this server's own memory. Neither opens a socket, so neither touches an
+ * external system, an account, or a public platform. `openWorldHint: false` is
+ * a claim about them that can be checked by reading their handlers, which is
+ * the only reason it is still here after the review.
+ */
+const READ_ONLY_LOCAL = {
+  ...READ_ONLY,
   openWorldHint: false,
 } as const;
 
@@ -125,11 +156,18 @@ const READ_ONLY = {
  * access, it does not remove or overwrite anything — and saying so explicitly
  * is what keeps a client from treating it as dangerous and what stops the
  * submission portal filing it under "no annotations".
+ *
+ * `idempotentHint: false` is the accurate answer rather than the flattering
+ * one: each call opens a NEW device-flow authorization with its own link and
+ * its own expiry, so calling it twice is not the same as calling it once. The
+ * tool's own description tells the model not to call it again while waiting,
+ * which is only worth saying because the repeat has an effect.
  */
 const GRANTS_ACCESS = {
   readOnlyHint: false,
   destructiveHint: false,
-  openWorldHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
 } as const;
 
 /**
@@ -148,7 +186,7 @@ const CREATES = {
   readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: false,
-  openWorldHint: false,
+  openWorldHint: true,
 } as const;
 
 /**
@@ -161,7 +199,7 @@ const EDITS_DRAFT = {
   readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: true,
-  openWorldHint: false,
+  openWorldHint: true,
 } as const;
 
 export function createServer(
@@ -231,7 +269,7 @@ export function createServer(
   const status = buildConnectionStatus(tokens);
   server.registerTool(
     status.name,
-    widgetAccessible({ ...status.config, annotations: READ_ONLY }),
+    widgetAccessible({ ...status.config, annotations: READ_ONLY_LOCAL }),
     safe(status.handler),
   );
 
@@ -251,7 +289,7 @@ export function createServer(
     const info = buildSessionInfo(tokens, session);
     server.registerTool(
       info.name,
-      widgetAccessible({ ...info.config, annotations: READ_ONLY }),
+      widgetAccessible({ ...info.config, annotations: READ_ONLY_LOCAL }),
       safe(info.handler),
     );
   }
@@ -446,7 +484,7 @@ export function createServer(
       // poll it from inside the iframe as well.
       widgetAccessible(
         withWidget(
-          { ...checkGeneration.config, annotations: READ_ONLY },
+          { ...checkGeneration.config, annotations: READ_ONLY_LOCAL },
           GENERATION_WIDGET_URI,
           { invoking: "Mengecek…", invoked: "Pratinjau" },
         ),

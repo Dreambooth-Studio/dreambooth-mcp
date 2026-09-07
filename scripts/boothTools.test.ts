@@ -172,13 +172,15 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     assert.equal(tool?.annotations?.readOnlyHint, true, name);
   }
   // Editing a draft changes it (not read-only) but replaces nothing published
-  // (not destructive), and the same edit twice leaves the same draft.
+  // (not destructive), and the same edit twice leaves the same draft. It does
+  // reach the operator's account on the Studio, so it is open-world by the
+  // plugin guidelines' definition of the hint — see the note in server.ts.
   {
     const tool = listed.tools.find((t) => t.name === "update_booth_draft");
     assert.equal(tool?.annotations?.readOnlyHint, false);
     assert.equal(tool?.annotations?.destructiveHint, false);
     assert.equal(tool?.annotations?.idempotentHint, true);
-    assert.equal(tool?.annotations?.openWorldHint, false);
+    assert.equal(tool?.annotations?.openWorldHint, true);
   }
 
   // A booth is visible from the moment it is asked for: the start, refine and
