@@ -34,16 +34,37 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join as joinPath } from "node:path";
 import { McpClient, payload, textOf } from "./mcp.mjs";
 
 const ARGS = process.argv.slice(2);
 const FLAGS = new Set(ARGS.filter((a) => a.startsWith("--")));
-const [BASE_ARG, STUDIO_ARG] = ARGS.filter((a) => !a.startsWith("--"));
+const CAPTURE_VALUE = (() => {
+  const i = ARGS.indexOf("--capture");
+  return i >= 0 ? ARGS[i + 1] : null;
+})();
+const [BASE_ARG, STUDIO_ARG] = ARGS.filter((a) => !a.startsWith("--") && a !== CAPTURE_VALUE);
 const BASE = (BASE_ARG || "").replace(/\/$/, "");
 const STUDIO = (STUDIO_ARG || "https://dreamboothstudio.com").replace(/\/$/, "");
 if (!BASE) throw new Error("usage: node oauth-write-check.mjs <mcpBaseUrl> [studioUrl] [--booth]");
 /** The booth round creates a real booth and spends real allowance: opt in. */
 const WITH_BOOTH = FLAGS.has("--booth");
+/**
+ * `--capture <dir>` writes every tool's structuredContent to that directory, in
+ * call order, as NNN-<tool>.json. The submission screenshots are rendered from
+ * these files rather than from mock payloads written by hand: a card built from
+ * a guess at the response is a drawing of the product, not a picture of it.
+ *
+ * Capturing also stops naming the booth "mcp-verify ...". create_booth defaults
+ * the title and link to the DRAFT's own, which is what a real operator gets, so
+ * the captured card shows the product rather than the test harness. The ids are
+ * printed at the end for cleanup.
+ */
+const CAPTURE_DIR = (() => {
+  const i = ARGS.indexOf("--capture");
+  return i >= 0 && ARGS[i + 1] && !ARGS[i + 1].startsWith("--") ? ARGS[i + 1] : null;
+})();
 
 const PORT = Number(process.env.OAUTH_CHECK_PORT || 8765);
 /**
@@ -332,10 +353,25 @@ async function call(name, args) {
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
   });
   const text = await res.text();
+  let parsed = null;
   for (const line of text.split("\n")) {
-    if (line.startsWith("data: ")) return JSON.parse(line.slice(6));
+    if (line.startsWith("data: ")) { parsed = JSON.parse(line.slice(6)); break; }
   }
-  return text.trim() ? JSON.parse(text.trim()) : null;
+  if (parsed === null) parsed = text.trim() ? JSON.parse(text.trim()) : null;
+  capture(name, parsed);
+  return parsed;
+}
+
+let captureSeq = 0;
+/** Writes one tool response's structuredContent, in call order. */
+function capture(name, parsed) {
+  if (!CAPTURE_DIR) return;
+  const content = parsed?.result?.structuredContent;
+  if (!content) return;
+  if (captureSeq === 0) mkdirSync(CAPTURE_DIR, { recursive: true });
+  captureSeq += 1;
+  const file = joinPath(CAPTURE_DIR, `${String(captureSeq).padStart(3, "0")}-${name}.json`);
+  writeFileSync(file, JSON.stringify(content, null, 2), "utf8");
 }
 
 console.log("");
@@ -571,11 +607,13 @@ if (WITH_BOOTH) {
     );
     ok(edited?.draft?.cta === "Mulai", "the draft now says the new button text", `cta=${edited?.draft?.cta}`);
 
-    const created = await call("create_booth", {
-      draftId: draft.draftId,
-      title: `mcp-verify ${stamp}`,
-      slug: `mcp-verify-${boothStamp}`,
-    });
+    // Capturing: let title and link default to the draft's, the way a real
+    // operator's booth is named. Otherwise mark it as this check's, so it is
+    // obvious in a dashboard list and safe to delete.
+    const created = await call("create_booth",
+      CAPTURE_DIR
+        ? { draftId: draft.draftId }
+        : { draftId: draft.draftId, title: `mcp-verify ${stamp}`, slug: `mcp-verify-${boothStamp}` });
     const createOut = payload(created?.result);
     if (created?.result?.isError || !createOut?.jobId) {
       ok(false, "create_booth started", textOf(created?.result ?? {}).slice(0, 100));
