@@ -43,15 +43,21 @@ APP_INFO = {
 }
 
 # ------------------------------------------------------------ annotations
-# Mirrors src/mcp/server.ts: READ_ONLY / GRANTS_ACCESS / CREATES. idempotentHint
-# is carried where the server declares it (the schema allows extra keys).
-READ_ONLY     = {"readOnlyHint": True,  "destructiveHint": False, "openWorldHint": False}
-GRANTS_ACCESS = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
-CREATES       = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False}
+# Mirrors src/mcp/server.ts: READ_ONLY / READ_ONLY_LOCAL / GRANTS_ACCESS /
+# CREATES. All four hints are stated on every tool: the v2.0.0 review rejected
+# the submission for hints that were absent rather than false, and a missing key
+# reads as null in the portal. openWorldHint now follows the plugin guidelines'
+# test (does it touch an external system, account or public platform?) rather
+# than the MCP spec's "one known service is a closed world" reading, which is
+# why it is true everywhere except the two tools that open no socket.
+READ_ONLY       = {"readOnlyHint": True,  "destructiveHint": False, "idempotentHint": True,  "openWorldHint": True}
+READ_ONLY_LOCAL = {"readOnlyHint": True,  "destructiveHint": False, "idempotentHint": True,  "openWorldHint": False}
+GRANTS_ACCESS   = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True}
+CREATES         = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True}
 
 ANN = {
     "connect_account": GRANTS_ACCESS,
-    "connection_status": READ_ONLY,
+    "connection_status": READ_ONLY_LOCAL,
     "get_sessions": READ_ONLY,
     "get_gallery_stats": READ_ONLY,
     "search_docs": READ_ONLY,
@@ -64,7 +70,7 @@ ANN = {
     "duplicate_project": CREATES,
     "start_frame": CREATES,
     "refine_frame": CREATES,
-    "check_generation": READ_ONLY,
+    "check_generation": READ_ONLY_LOCAL,
     "save_frame": CREATES,
     "preview_filter": READ_ONLY,
     "start_booth": CREATES,
@@ -72,7 +78,7 @@ ANN = {
     "create_booth": CREATES,
     "get_booth_draft": READ_ONLY,
     # Edits an uncreated draft: not read-only, not destructive, idempotent.
-    "update_booth_draft": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+    "update_booth_draft": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
 }
 
 # ----------------------------------------------------------- justifications
@@ -83,112 +89,112 @@ J = {
   "connect_account": {
     "read_only_justification": "Not read-only, narrowly: it attaches an account to this conversation, which changes what it may see. It stores nothing in the account, edits nothing and deletes nothing.",
     "destructive_justification": "It grants access; it never removes or overwrites anything. Disconnecting afterwards leaves the account exactly as it was, and nothing it does can lose the operator's data.",
-    "open_world_justification": "Its own network calls go to one known service: Dreambooth Studio's sign-in endpoint. The link it returns is opened by the person in their own browser and completes at Google, outside this tool.",
+    "open_world_justification": "Open world: it starts a sign-in against Dreambooth Studio, a service outside ChatGPT, and the link it returns is approved by the person in their own browser, attaching that account here.",
   },
   "connection_status": {
     "read_only_justification": "Reads the credential state of the current request and returns it. It contacts no server at all, which is what makes it safe for the sign-in card to poll every two seconds.",
     "destructive_justification": "It only reports whether an account is attached and which one. It cannot change or clear that connection.",
-    "open_world_justification": "It reaches no network destination whatsoever. There is nothing external for it to be open against.",
+    "open_world_justification": "Closed world, and checkably so: it reads the credential state of the request in hand and opens no socket at all. No external system, no account, nothing published.",
   },
   "get_sessions": {
     "read_only_justification": "Issues a single read of the operator's own session records. It cannot create, edit, refund or delete a session, and there is no write path to that data anywhere in this app.",
     "destructive_justification": "Reading a booking history changes nothing about it. The records it returns are the operator's own and remain untouched.",
-    "open_world_justification": "It calls one known endpoint on Dreambooth Studio, scoped server-side to the account that signed in. It cannot be pointed at another operator: no tool here accepts an email or user id as an argument.",
+    "open_world_justification": "Open world: it reads the operator's records on Dreambooth Studio, an external account. Scoped server-side to the token, and no tool here takes an email or user id, so it cannot be widened.",
   },
   "get_gallery_stats": {
     "read_only_justification": "Returns counts only, from a single read. It cannot delete media, extend retention, or alter what has expired.",
     "destructive_justification": "Counting photos does not touch them. Media that has expired past its retention window stays expired; this tool cannot restore or remove anything.",
-    "open_world_justification": "One known endpoint on Dreambooth Studio, scoped to the signed-in account. It returns no media and no links to media, so nothing it hands back can reach an external host either.",
+    "open_world_justification": "Open world: it counts media held on Dreambooth Studio, an external account. It returns no media and no links to any, so nothing it hands back reaches further.",
   },
   "search_docs": {
     "read_only_justification": "Reads a public, build-time search index of our own documentation and returns short excerpts. It touches no account data at all, which is why it works before anyone signs in.",
     "destructive_justification": "It reads published documentation. There is nothing it could damage.",
-    "open_world_justification": "It fetches one static file from our own website. It is not a web search: it cannot reach any host we do not publish, and it cannot be steered to an arbitrary URL.",
+    "open_world_justification": "Open world: it fetches a file from dreamboothstudio.com, a system outside ChatGPT. Not a web search though: it reads only our published docs index and cannot be pointed at another host.",
   },
   "list_projects": {
     "read_only_justification": "A single read of the booths the operator owns. It cannot create, rename, deactivate or delete a booth.",
     "destructive_justification": "Listing booths leaves every one of them exactly as it was.",
-    "open_world_justification": "One known endpoint on Dreambooth Studio, scoped server-side to the authenticated account. The operator is resolved from the credential, never from an argument, so the model cannot widen what it reads.",
+    "open_world_justification": "Open world: it lists booths held on Dreambooth Studio, an external account. The operator is resolved from the credential, never from an argument, so the model cannot widen what it reads.",
   },
   "get_project": {
     "read_only_justification": "Reads one booth's configuration and its device's current status. It cannot change a booth setting, restart a device, or alter any monitoring record.",
     "destructive_justification": "Checking whether a booth is online has no effect on the booth. The device is never contacted directly; this reads status our own service already holds.",
-    "open_world_justification": "Two known endpoints on Dreambooth Studio, the project record and device monitoring, both scoped to the signed-in account. It reaches nothing outside our own service.",
+    "open_world_justification": "Open world: two endpoints on Dreambooth Studio, the booth record and its device status, both on the operator's external account. It reaches nothing beyond that service.",
   },
   "get_revenue_summary": {
     "read_only_justification": "Reads a revenue calculation the Studio dashboard already performs. It cannot move money, issue a refund, adjust a figure, or alter any transaction.",
     "destructive_justification": "It reports totals that already exist. Nothing about the underlying transactions changes when they are summed.",
-    "open_world_justification": "One known endpoint on Dreambooth Studio, scoped server-side to the operator who signed in. There is no payment provider call and no external destination of any kind.",
+    "open_world_justification": "Open world: it reads takings held on Dreambooth Studio, an external account. No payment provider is contacted and no money moves; the figures already exist there.",
   },
   "get_credits": {
     "read_only_justification": "Reads the current AI credit balance and subscription plan. It cannot purchase, grant, spend or refund credits, and it cannot change a plan.",
     "destructive_justification": "Checking a balance does not consume it. Credits are spent by running AI effects on a booth, which this app cannot do.",
-    "open_world_justification": "One known endpoint on Dreambooth Studio, scoped to the signed-in account. No billing provider is contacted.",
+    "open_world_justification": "Open world: it reads a balance held on Dreambooth Studio, an external account. No billing provider is contacted and nothing is bought.",
   },
   "get_wallet_transactions": {
     "read_only_justification": "Reads the operator's own wallet ledger. It cannot initiate a withdrawal, move funds, reverse an entry, or modify the ledger in any way.",
     "destructive_justification": "Reading a ledger is what a ledger is for. Every entry it returns stays exactly as recorded.",
-    "open_world_justification": "One known endpoint on Dreambooth Studio, scoped server-side to the authenticated operator. No bank or disbursement provider is contacted.",
+    "open_world_justification": "Open world: it reads a ledger held on Dreambooth Studio, an external account. No bank or disbursement provider is contacted and no funds move.",
   },
   "create_filter": {
     "read_only_justification": "It creates one new photo filter on the operator's own account: a name and numeric adjustments. It only ever adds a row; it cannot modify or remove an existing filter, and no tool here can.",
     "destructive_justification": "It adds; it never overwrites or deletes. It cannot rename, replace, deactivate or remove an existing filter, and it cannot touch photos, bookings or money. Undoing it is one click in the dashboard.",
-    "open_world_justification": "One known endpoint: POST /api/filters on Dreambooth Studio. The operator is resolved server-side from the OAuth token; the schema has no userId or email field, and only name and adjustments are sent.",
+    "open_world_justification": "Open world: it writes a filter to the operator's account on Dreambooth Studio, an external service. Operator resolved from the token; the schema has no userId or email field.",
   },
   "duplicate_project": {
     "read_only_justification": "It creates a copy of a booth the operator already owns, from an id they supply. The original is unchanged. It adds a new booth and nothing else.",
     "destructive_justification": "It only adds. It cannot edit, rename, deactivate or delete the original or any other booth. The copy gets its own link name, so nothing published changes; undoing it is one click in the dashboard.",
-    "open_world_justification": "One known endpoint: the ?duplicate branch of POST /api/projects on Dreambooth Studio. The source booth is looked up server-side under the token's operator, so another account's booth cannot be copied.",
+    "open_world_justification": "Open world: it creates a booth on Dreambooth Studio, reachable at its own public link. The source is looked up under the token's operator, so another account's booth cannot be copied.",
   },
   "start_frame": {
     "read_only_justification": "Not read-only: it opens a design thread and makes one AI image on the operator's own account. It adds a draft generation; it edits, replaces or removes nothing, and saves no frame.",
     "destructive_justification": "It only adds a preview inside a thread. It cannot overwrite, rename or delete a frame, a thread or anything else; nothing is in the frame list until save_frame.",
-    "open_world_justification": "Two known Studio endpoints: POST /api/ai/frames/start, then POST /api/ai/threads/{id}/messages. Operator resolved server-side from the OAuth token; no userId or email argument.",
+    "open_world_justification": "Open world: it opens a design thread and runs an image generation on the operator's Dreambooth account, an external service. Operator resolved from the token; no userId or email argument.",
   },
   "refine_frame": {
     "read_only_justification": "Not read-only: it adds one more AI generation to a design thread the operator owns. It changes no saved frame and nothing outside that thread.",
     "destructive_justification": "Only adds a new version; earlier versions stay in the thread and remain saveable. It cannot delete, overwrite or deactivate anything.",
-    "open_world_justification": "One known endpoint: POST /api/ai/threads/{id}/messages on Dreambooth Studio. The thread must belong to the token's operator; no userId or email argument.",
+    "open_world_justification": "Open world: it adds a generation to a thread on the operator's Dreambooth account, an external service. The thread must belong to the token's operator; no userId or email argument.",
   },
   "check_generation": {
     "read_only_justification": "Reads the state of a background job held in this server's memory. It never calls Dreambooth and never writes anything.",
     "destructive_justification": "A status read. Asking it any number of times creates, edits or removes nothing; it only reports what a start/refine/create job has done so far.",
-    "open_world_justification": "No outbound call at all: it reads an in-memory job record keyed to a hash of the caller's own token, so it cannot see another connection's jobs.",
+    "open_world_justification": "Closed world: no outbound call at all. It reads a job record in this server's own memory, keyed to a hash of the caller's token, so it cannot even see another connection's jobs.",
   },
   "save_frame": {
     "read_only_justification": "Not read-only: it turns one chosen generation into a new frame on the operator's account. It only ever adds a frame; it edits, replaces or removes none.",
     "destructive_justification": "Adds one frame. It cannot overwrite, rename, deactivate or delete an existing frame or assign one to a booth. Saving twice makes two frames, which idempotentHint states.",
-    "open_world_justification": "One known endpoint: POST /api/ai/frames/from-generation on Dreambooth Studio. Thread and generation are looked up server-side under the token's operator; no userId or email argument.",
+    "open_world_justification": "Open world: it saves a frame to the operator's account on Dreambooth Studio, an external service. Thread and generation are looked up under the token's operator; no userId argument.",
   },
   "preview_filter": {
     "read_only_justification": "Read-only: it asks Dreambooth to render its sample photo through the filter pipeline and returns an image URL. No filter is written and nothing on the account changes.",
     "destructive_justification": "Renders a preview image; creates, edits or removes nothing the operator can see. The same look renders to the same cached file however often it is asked.",
-    "open_world_justification": "One known endpoint: GET /api/filters/preview on Dreambooth Studio. The session is resolved server-side from the token; no userId or email argument.",
+    "open_world_justification": "Open world: it asks Dreambooth Studio, an external service, to render its sample photo and returns the image URL. Session resolved from the token; no userId or email argument.",
   },
   "start_booth": {
     "read_only_justification": "Not read-only: it asks Dreambooth to design a booth draft (spec, welcome screens, background) on the operator's own account. It adds a draft; it edits nothing and creates no booth.",
     "destructive_justification": "It only adds a draft that expires in 7 days. It cannot overwrite, deactivate or delete an existing booth or draft; nothing is in the booth list until create_booth.",
-    "open_world_justification": "One known endpoint: POST /api/onboarding/generate on Dreambooth Studio, the same route the /new wizard uses. Operator resolved server-side from the token; no userId or email argument.",
+    "open_world_justification": "Open world: it has Dreambooth Studio, an external service, design a draft on the operator's account. Same route the /new wizard uses; operator resolved from the token, no userId argument.",
   },
   "refine_booth": {
     "read_only_justification": "Not read-only: it redraws part of a draft the operator owns, or rebuilds it from a new description. It changes only that uncreated draft, never a created booth.",
     "destructive_justification": "A redraw replaces an image inside a draft the operator asked to change; it cannot touch any booth that exists, and the Studio caps a draft at 5 redraws and 3 rebuilds.",
-    "open_world_justification": "One known endpoint: POST /api/onboarding/generate on Dreambooth Studio. The draft must belong to the token's operator; no userId or email argument.",
+    "open_world_justification": "Open world: it redraws part of a draft on the operator's Dreambooth account, an external service. The draft must belong to the token's operator; no userId or email argument.",
   },
   "get_booth_draft": {
     "read_only_justification": "Reads one booth draft (a design not yet created) on the operator's own account and returns it. It writes nothing and creates nothing.",
     "destructive_justification": "A read of a draft: asking it any number of times changes nothing. It cannot delete, overwrite or create a draft or a booth.",
-    "open_world_justification": "One known endpoint: GET /api/onboarding/draft on Dreambooth Studio. The draft must belong to the token's operator; no userId or email argument.",
+    "open_world_justification": "Open world: it reads a draft held on the operator's Dreambooth account, an external service. The draft must belong to the token's operator; no userId or email argument.",
   },
   "update_booth_draft": {
     "read_only_justification": "Not read-only: it changes settings of a booth DRAFT the operator owns (title, button text, colours, photo count, frames, filters) before it is created. A created booth is never touched.",
     "destructive_justification": "It edits a draft that is not yet a booth; nothing published is overwritten or deleted, and a draft expires in 7 days anyway. The same edit twice leaves the same draft (idempotent).",
-    "open_world_justification": "One known endpoint: PATCH /api/onboarding/draft on Dreambooth Studio (plus the AI-effect catalogue when one is named). The draft must belong to the token's operator; no userId or email argument.",
+    "open_world_justification": "Open world: it edits a draft on the operator's Dreambooth account, an external service. Nothing is published by it; the draft must belong to the token's operator, no userId argument.",
   },
   "create_booth": {
     "read_only_justification": "Not read-only: it creates one booth from a draft the operator approved, with its frames and filters. It adds; it cannot edit or delete a booth that exists.",
     "destructive_justification": "Only adds: one booth, its own frames, picked filters. It cannot overwrite, deactivate or delete a booth; a taken link name stops it before anything is made. Creating twice makes two.",
-    "open_world_justification": "Known Studio endpoints only: by-slug, draft-frames, frames and filter catalogue, AI-effect catalogue, POST /api/projects/onboarding. Operator resolved from the token; no userId or email argument.",
+    "open_world_justification": "Open world, and the clearest case for it here: it creates a booth that is publicly visible at dreambooth.app, on the operator's external account. Operator resolved from the token.",
   },
 }
 
