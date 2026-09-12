@@ -14,14 +14,37 @@ import type { Config } from "../config.js";
  * — one implementation, not a second one here.
  *
  * Synchronous, unlike the generation tools: there is no image model in this
- * step, only a download, a cut and an upload, which fits inside the request
- * timeout. If it ever does not, the timeout message says to check the
- * dashboard rather than retry — the same rule as every other write here,
- * because the save may well have gone through.
+ * step, only a download, a cut and an upload. That work takes under a second —
+ * measured, on a real 1600x2400 generation — and everything around it does
+ * not, which is why this call carries its own ceiling (SAVE_TIMEOUT_MS) rather
+ * than the 15 s every interactive call gets. When it does run out, the
+ * timeout message says to check the dashboard rather than retry — the same
+ * rule as every other write here, because the save may well have gone
+ * through, and a second one would make a second frame.
  *
  * Requires an OAuth connection carrying `booths:write`. A read-only connection
  * gets a 403 whose sentence names the fix; see writeErrorFor.
  */
+
+/**
+ * How long the save may take before the connector gives up on it.
+ *
+ * It used to inherit `Config.requestTimeoutMs` (15 s), and a live write check
+ * caught that: the Studio route declares `maxDuration = 60` for a reason. A
+ * route this rarely called is usually cold, and pays for a serverless start
+ * carrying sharp, a first Mongo handshake, a ~2 MB download and a ~9 MB
+ * upload before it can answer. The picture work inside it is under a second;
+ * 15 s was never a budget for the rest.
+ *
+ * 45 s and not the route's own 60 s, because this tool BLOCKS: the MCP
+ * client's default request timeout is 60 s, so a call that waited that long
+ * would be abandoned by the client first, and the operator would get a hang
+ * instead of a sentence. Giving up at 45 s keeps the failure legible. A save
+ * that takes longer than that still answers ambiguously — "it may have gone
+ * through" — and that is the honest answer, not a gap to close by waiting
+ * longer.
+ */
+export const SAVE_TIMEOUT_MS = 45_000;
 
 export const saveFrameOutput = {
   kind: z.literal("frame"),
@@ -90,12 +113,17 @@ export function buildSaveFrame(studio: StudioClient, config: Config) {
        * Built field by field rather than spread from `args`: identity is not
        * an argument, and `ownerEmail` must never leave this process.
        */
-      const saved = await studio.post<SavedFrame>("/api/ai/frames/from-generation", {
-        threadId: args.threadId,
-        generationId: args.generationId,
-        name: args.name,
-        isPublic: args.isPublic ?? false,
-      });
+      const saved = await studio.post<SavedFrame>(
+        "/api/ai/frames/from-generation",
+        {
+          threadId: args.threadId,
+          generationId: args.generationId,
+          name: args.name,
+          isPublic: args.isPublic ?? false,
+        },
+        {},
+        { timeoutMs: SAVE_TIMEOUT_MS }
+      );
       // A booth created later in this conversation carries the frame
       // (create_booth reads this), instead of relying on it leading the pool.
       recentCreations.remember(studio.ownerKey(), "frame", saved?.frameId);
