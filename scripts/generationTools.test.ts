@@ -375,6 +375,61 @@ test("a failed generation relays a Studio HTTP refusal verbatim", async () => {
   const done = await check.handler({ jobId: started.jobId });
   assert.equal(done.state, "failed");
   assert.match(String(done.error), /read-only/);
+
+  /**
+   * The thread was opened before the generation was refused, and it is still
+   * there. Saying so is the difference between continuing in it and calling
+   * start_frame again — which would leave the first one empty on the account
+   * and spend a second slot of the daily allowance to get back to where the
+   * operator already was.
+   */
+  assert.equal(done.threadId, "t1", "a refused generation does not lose its thread");
+  assert.match(String(done.note), /thread is open/i);
+  assert.match(String(done.note), /refine_frame/);
+});
+
+test("a refinement keeps the geometry of the thread it is in", async () => {
+  // A thread is anchored to one blank template, so the layout and the photo
+  // windows cannot change between versions. Only start_frame is told what they
+  // are; without carrying them the preview card loses its caption on every
+  // version after the first.
+  const { studio } = fakeStudio(happy);
+  const start = buildStartFrame(studio);
+  const refine = buildRefineFrame(studio);
+  const check = buildCheckGeneration(studio, CONFIG);
+
+  const started = await start.handler({ prompt: "batik", layout: "strip-3" });
+  await drained();
+  const first = await check.handler({ jobId: started.jobId });
+  assert.equal(first.layout, "strip-3");
+
+  const refined = await refine.handler({ threadId: String(first.threadId), prompt: "darker" });
+  await drained();
+  const second = await check.handler({ jobId: refined.jobId });
+
+  assert.equal(second.state, "done");
+  assert.equal(second.layout, "strip-3");
+  assert.equal(second.canvasWidth, 1600);
+  assert.equal(second.canvasHeight, 2400);
+  assert.equal(second.placeholderCount, 6);
+});
+
+test("a refinement in a thread this process never opened still works", async () => {
+  // The job store is per-process: a thread from before a restart has no job to
+  // read geometry from. The refinement must still run — a missing caption is
+  // not a reason to refuse the operator's change.
+  const { studio } = fakeStudio(happy);
+  const refine = buildRefineFrame(studio);
+  const check = buildCheckGeneration(studio, CONFIG);
+
+  const refined = await refine.handler({ threadId: "t-from-yesterday", prompt: "darker" });
+  await drained();
+  const done = await check.handler({ jobId: refined.jobId });
+
+  assert.equal(done.state, "done");
+  assert.equal(done.threadId, "t-from-yesterday");
+  assert.ok(done.imageUrl, "the new version is there");
+  assert.equal(done.layout, undefined, "and the caption is simply absent");
 });
 
 test("an image the Studio could not upload is dropped, not relayed", async () => {

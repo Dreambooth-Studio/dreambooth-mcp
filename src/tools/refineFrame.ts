@@ -66,11 +66,43 @@ export function buildRefineFrame(studio: StudioClient) {
       const ownerKey = studio.ownerKey();
       const what = labelFor(args.prompt);
 
+      /**
+       * The thread's geometry, from the job that opened it.
+       *
+       * A refinement is a new image on the SAME blank template — the layout,
+       * the canvas and the photo windows cannot change, because the thread is
+       * anchored to one template. But only `start_frame` is told what they
+       * are, so every refinement used to answer with them missing and the
+       * preview card lost its caption ("strip-3 · 1600x2400 · 6 photos") on
+       * every version after the first.
+       *
+       * Read from this process, so it is gone after a restart. That is the
+       * right trade: a caption is worth a map lookup and not worth a round
+       * trip to the Studio, and a missing one degrades to what the card
+       * already does today.
+       */
+      const opened = jobs
+        .list<GenerationResult>(ownerKey)
+        .find(
+          (j) =>
+            j.kind === "generation" &&
+            j.state === "done" &&
+            j.result?.threadId === args.threadId &&
+            j.result?.layout !== undefined
+        )?.result;
+
       try {
-        const job = jobs.start<GenerationResult>(ownerKey, what, async () => {
+        const job = jobs.start<GenerationResult>(ownerKey, what, async (ctx) => {
+          ctx.ref(args.threadId);
           const generated = await sendFramePrompt(studio, args.threadId, args.prompt);
           return {
             threadId: args.threadId,
+            templateId: opened?.templateId,
+            layout: opened?.layout,
+            shape: opened?.shape,
+            canvasWidth: opened?.canvasWidth,
+            canvasHeight: opened?.canvasHeight,
+            placeholderCount: opened?.placeholderCount,
             generationId: generated.generationId,
             imageUrl: generated.imageUrl,
           };

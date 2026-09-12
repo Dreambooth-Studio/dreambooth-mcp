@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOW_ROUTE_TIMEOUT_MS } from "../studio/budgets.js";
 import type { StudioClient } from "../studio/client.js";
 
 /**
@@ -37,15 +38,22 @@ export const getProjectOutput = {
      * a PROTOCOL error, so clients retry instead of relaying and the operator
      * sees a hang rather than a message.
      */
+    /**
+     * `.catch()` keeps the documented shape in the generated JSON Schema — the
+     * model still learns what to expect — while degrading anything unexpected
+     * to undefined. `.optional()` alone only tolerates absence; it still
+     * throws on a type change.
+     *
+     * But `.catch()` on its own does NOT close this. The server validates
+     * against this zod object and then sends the ORIGINAL value, so a
+     * surprising shape sails past a catch that never touched the wire, and the
+     * CLIENT rejects it against the published JSON Schema instead — the same
+     * -32602, just raised one hop later. Which is why the handler runs this
+     * value through `SCREEN_SIZE` before returning it.
+     */
     screenSize: z
       .object({ width: z.number().optional(), height: z.number().optional() })
       .optional()
-      // .catch() is the pattern to copy for any field whose shape the Studio
-      // owns. It keeps the documented shape in the generated JSON Schema — the
-      // model still learns what to expect — while degrading anything
-      // unexpected to undefined instead of throwing. `.optional()` alone only
-      // tolerates absence; it still throws on a type change, and a throw here
-      // is a protocol error, not a tool error.
       .catch(undefined),
     updatedAt: z.string().optional(),
   }),
@@ -109,6 +117,12 @@ interface DeviceItem {
   printerStatus: string | null;
 }
 
+/** The one field here whose shape the Studio owns, as its own parser. */
+const SCREEN_SIZE = z
+  .object({ width: z.number().optional(), height: z.number().optional() })
+  .optional()
+  .catch(undefined);
+
 export function buildGetProject(studio: StudioClient) {
   return {
     name: "get_project",
@@ -120,9 +134,11 @@ export function buildGetProject(studio: StudioClient) {
       outputSchema: getProjectOutput,
     },
     handler: async (args: { projectId: string }) => {
-      const project = await studio.get<ProjectDoc>("/api/projects", {
-        id: args.projectId,
-      });
+      const project = await studio.get<ProjectDoc>(
+        "/api/projects",
+        { id: args.projectId },
+        { timeoutMs: SLOW_ROUTE_TIMEOUT_MS }
+      );
 
       // Device status is a nice-to-have: a monitoring hiccup must not turn
       // "tell me about this booth" into an error.
@@ -147,7 +163,9 @@ export function buildGetProject(studio: StudioClient) {
           isPublic: project.isPublic,
           currency: project.resolvedCurrency,
           country: project.country,
-          screenSize: project.screenSize,
+          // Parsed, not forwarded: see the note on the field's schema. This is
+          // the step that makes what goes on the wire match what was published.
+          screenSize: SCREEN_SIZE.parse(project.screenSize),
           updatedAt: project.updatedAt,
         },
         deviceCount: devices.length,

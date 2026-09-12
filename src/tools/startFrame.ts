@@ -100,7 +100,7 @@ export function buildStartFrame(studio: StudioClient) {
         const job = jobs.start<GenerationResult>(
           ownerKey,
           what,
-          async () => {
+          async (ctx) => {
             /**
              * Built field by field, never spread from `args`. A spread would
              * forward anything the model invented, `ownerEmail` above all — which
@@ -123,6 +123,17 @@ export function buildStartFrame(studio: StudioClient) {
                 false
               );
             }
+            /**
+             * The thread exists from here on, whatever happens next.
+             *
+             * A first prompt is the one most likely to be refused — an image
+             * model will not draw a named brand or character, and the daily
+             * allowance can run out mid-conversation. Recording the thread
+             * before generating means a refusal leaves something to continue
+             * in, instead of an empty thread nobody can reach and a second one
+             * opened to replace it.
+             */
+            ctx.ref(thread.threadId);
             const generated = await sendFramePrompt(studio, thread.threadId, args.prompt);
             return {
               threadId: thread.threadId,

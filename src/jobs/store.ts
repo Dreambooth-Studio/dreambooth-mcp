@@ -71,10 +71,22 @@ export type JobState = "running" | "done" | "failed";
  */
 export type JobKind = "generation" | "booth-draft" | "booth";
 
-/** What running work may do to its own record: say where it is. */
+/** What running work may do to its own record: say where it is, and what it turned out to be about. */
 export interface JobContext {
   jobId: string;
   progress: (text: string) => void;
+  /**
+   * Records the thing this job turned out to be about — a thread id — once it
+   * knows. Unlike `JobOptions.ref`, which is for work that knows before it
+   * starts, this is for work that CREATES the thing it is about: `start_frame`
+   * opens a design thread and only then generates in it.
+   *
+   * It matters most when the job then fails. A thread that exists is not lost
+   * because the generation in it was refused, and a poll that can name it
+   * lets the conversation carry on in the same thread instead of opening a
+   * second one nobody asked for.
+   */
+  ref: (value: string) => void;
 }
 
 export interface JobOptions {
@@ -195,6 +207,7 @@ export class JobStore {
     const ctx: JobContext = {
       jobId: job.id,
       progress: (text) => this.progress(job.id, text),
+      ref: (value) => this.setRef(job.id, value),
     };
     void work(ctx).then(
       (result) => {
@@ -251,6 +264,19 @@ export class JobStore {
     const job = this.jobs.get(id);
     if (!job || job.state !== "running") return;
     job.progress = text.trim().slice(0, 140);
+  }
+
+  /**
+   * Records what a running job turned out to be about. Same "running only"
+   * rule as `progress`, and for the same reason — but the value SURVIVES the
+   * job finishing, because pointing at a thread is exactly what a failed
+   * generation still has to offer.
+   */
+  private setRef(id: string, value: string): void {
+    const job = this.jobs.get(id);
+    if (!job || job.state !== "running") return;
+    const trimmed = value.trim();
+    if (trimmed) job.ref = trimmed;
   }
 
   /**

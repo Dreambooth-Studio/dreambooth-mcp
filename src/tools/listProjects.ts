@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOW_ROUTE_TIMEOUT_MS } from "../studio/budgets.js";
 import type { StudioClient } from "../studio/client.js";
 
 /**
@@ -55,7 +56,9 @@ export function buildListProjects(studio: StudioClient) {
     },
     handler: async () => {
       const data = await studio.get<ProjectRow[] | { projects?: ProjectRow[] }>(
-        "/api/projects"
+        "/api/projects",
+        {},
+        { timeoutMs: SLOW_ROUTE_TIMEOUT_MS }
       );
       const rows: ProjectRow[] = Array.isArray(data) ? data : (data.projects ?? []);
 
