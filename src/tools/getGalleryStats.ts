@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOW_ROUTE_TIMEOUT_MS } from "../studio/budgets.js";
 import type { StudioClient } from "../studio/client.js";
 
 /**
@@ -47,7 +48,7 @@ export function buildGetGalleryStats(studio: StudioClient) {
         projectId: args.projectId,
         includeExpired: args.includeExpired ? "true" : undefined,
         limit: "1",
-      });
+      }, { timeoutMs: SLOW_ROUTE_TIMEOUT_MS });
 
       return {
         totalCount: data.stats?.totalCount ?? data.totalCount ?? 0,

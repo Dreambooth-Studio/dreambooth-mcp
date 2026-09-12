@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOW_ROUTE_TIMEOUT_MS } from "../studio/budgets.js";
 import type { StudioClient } from "../studio/client.js";
 
 /**
@@ -120,9 +121,11 @@ export function buildGetProject(studio: StudioClient) {
       outputSchema: getProjectOutput,
     },
     handler: async (args: { projectId: string }) => {
-      const project = await studio.get<ProjectDoc>("/api/projects", {
-        id: args.projectId,
-      });
+      const project = await studio.get<ProjectDoc>(
+        "/api/projects",
+        { id: args.projectId },
+        { timeoutMs: SLOW_ROUTE_TIMEOUT_MS }
+      );
 
       // Device status is a nice-to-have: a monitoring hiccup must not turn
       // "tell me about this booth" into an error.

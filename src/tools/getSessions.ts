@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOW_ROUTE_TIMEOUT_MS } from "../studio/budgets.js";
 import type { StudioClient } from "../studio/client.js";
 
 /**
@@ -83,7 +84,7 @@ export function buildGetSessions(studio: StudioClient) {
         sessionStatus: args.sessionStatus,
         paymentSource: args.paymentSource,
         limit: String(args.limit ?? 20),
-      });
+      }, { timeoutMs: SLOW_ROUTE_TIMEOUT_MS });
 
       return {
         total: data.total,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOW_ROUTE_TIMEOUT_MS } from "../studio/budgets.js";
 import type { StudioClient } from "../studio/client.js";
 import type { Config } from "../config.js";
 
@@ -65,11 +66,20 @@ export function buildDuplicateProject(studio: StudioClient, config: Config) {
        * copies it; anything sent in the body is ignored by that path. Sending
        * fields anyway would look like this tool can influence the copy, which
        * is the first step towards someone adding a parameter that does.
+       *
+       * The route is one `vercel.json` budgets at 30 s, and the duplicate
+       * branch is its heaviest path: copy the project, then
+       * `sanitizeProjectAssetReferences` queries Frames, Filters and Stickers
+       * to drop references the copy's owner cannot use. On the interactive
+       * ceiling this was the second write in the connector that could end on
+       * "may have gone through anyway" — and for a booth, that leaves the
+       * operator not knowing whether a copy exists.
        */
       const created = await studio.post<ProjectDoc>(
         "/api/projects",
         {},
-        { duplicate: "true", id: args.projectId }
+        { duplicate: "true", id: args.projectId },
+        { timeoutMs: SLOW_ROUTE_TIMEOUT_MS }
       );
 
       return {

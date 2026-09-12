@@ -7,7 +7,12 @@ import { createServer } from "../src/mcp/server.js";
 import { SessionTokens } from "../src/auth/tokenStore.js";
 import { buildCreateFilter } from "../src/tools/createFilter.js";
 import { buildDuplicateProject } from "../src/tools/duplicateProject.js";
-import { writeErrorFor } from "../src/studio/errors.js";
+import { buildGetGalleryStats } from "../src/tools/getGalleryStats.js";
+import { buildGetProject } from "../src/tools/getProject.js";
+import { buildGetSessions } from "../src/tools/getSessions.js";
+import { buildListProjects } from "../src/tools/listProjects.js";
+import { SLOW_ROUTE_BUDGET_MS, SLOW_ROUTE_TIMEOUT_MS } from "../src/studio/budgets.js";
+import { studioErrorFor, writeErrorFor } from "../src/studio/errors.js";
 import type { Config } from "../src/config.js";
 import type { StudioClient } from "../src/studio/client.js";
 
@@ -29,11 +34,26 @@ const CONFIG = {
 
 /** Records what would have been sent, and answers with whatever the test wants. */
 function fakeStudio(reply: unknown) {
-  const calls: Array<{ path: string; body: unknown; query: unknown }> = [];
+  const calls: Array<{
+    path: string;
+    body: unknown;
+    query: unknown;
+    /** The per-call ceiling, which is the whole subject of one test below. */
+    options?: { timeoutMs?: number };
+  }> = [];
   const studio = {
     ownerKey: () => "owner-test",
-    post: async (path: string, body: unknown, query: unknown = {}) => {
-      calls.push({ path, body, query });
+    post: async (
+      path: string,
+      body: unknown,
+      query: unknown = {},
+      options?: { timeoutMs?: number }
+    ) => {
+      calls.push({ path, body, query, options });
+      return reply;
+    },
+    get: async (path: string, query: unknown = {}, options?: { timeoutMs?: number }) => {
+      calls.push({ path, body: undefined, query, options });
       return reply;
     },
   } as unknown as StudioClient;
@@ -121,9 +141,12 @@ test("create_filter sends only the fields it declares", async () => {
     ownerEmail: "someone.else@example.com",
   } as never);
 
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].path, "/api/filters");
-  assert.deepEqual(calls[0].body, {
+  // The save itself, named rather than taken by position: create_filter also
+  // fetches the preview afterwards, best-effort, and that call is not what this
+  // test is about.
+  const saves = calls.filter((c) => c.path === "/api/filters" && c.body !== undefined);
+  assert.equal(saves.length, 1);
+  assert.deepEqual(saves[0].body, {
     name: "Senja Hangat",
     adjustments: { contrast: 112 },
     isPublic: false,
@@ -185,10 +208,86 @@ test("a write failure relays the Studio's own sentence", async () => {
   assert.equal(error.retryable, false, "repeating it produces the same answer");
 });
 
-test("a write failure with no readable body falls back to the generic mapping", async () => {
-  const error = await writeErrorFor(new Response("<html>gateway</html>", { status: 502 }), "/api/filters");
-  assert.equal(error.status, 502);
-  assert.ok(error.message.length > 0);
+test("a gateway failure on a write is never retryable", async () => {
+  /**
+   * The gap that let this through: the test below passes a JSON body, so it
+   * only ever walked the path that relays the Studio's own sentence — which
+   * IS non-retryable. The fallback beside it was checked for a status and a
+   * non-empty string and nothing else, and it was calling a 5xx retryable,
+   * because that is what the READ mapping does. An HTML 502 or a platform
+   * timeout page is exactly the shape a half-finished write arrives in.
+   */
+  for (const status of [500, 502, 503, 504]) {
+    const error = await writeErrorFor(new Response("<html>gateway</html>", { status }), "/api/projects");
+    assert.equal(error.status, status);
+    assert.equal(error.retryable, false, `a ${status} on a write must not invite a second one`);
+    assert.match(error.message, /may have gone through/i);
+    assert.match(error.message, /do not try again/i);
+  }
+});
+
+test("below 500 a body-less write failure still gets the generic mapping", async () => {
+  // A rate limit is a refusal before any work, so asking again later is the
+  // right advice — the 5xx rule above must not swallow that.
+  const error = await writeErrorFor(new Response("<html>slow down</html>", { status: 429 }), "/api/filters");
+  assert.equal(error.status, 429);
+  assert.equal(error.retryable, true);
+});
+
+test("the routes the Studio budgets at 30 s are given more than 15", async () => {
+  /**
+   * `vercel.json` raises exactly three user-facing routes above the default,
+   * to 30 s: `app/api/projects`, `app/api/sessions`, `app/api/gallery`. They
+   * are the heaviest reads in the product and somebody measured them. Every
+   * call below was inheriting the 15 s interactive ceiling — half of what the
+   * route is allowed to take — so a slow-but-working answer arrived here as a
+   * failure, and for `duplicate_project`, a write, as "may have gone through
+   * anyway".
+   *
+   * Asserted as a relationship and not as a number: above the route's own
+   * ceiling so its 504 answers first, and below the MCP client's 60 s default
+   * so the client does not abandon the call before the tool can speak.
+   */
+  assert.ok(SLOW_ROUTE_TIMEOUT_MS > SLOW_ROUTE_BUDGET_MS, "past the route's own ceiling");
+  assert.ok(SLOW_ROUTE_TIMEOUT_MS < 60_000, "inside the MCP client's default timeout");
+
+  const cases: Array<[string, (studio: StudioClient) => Promise<unknown>]> = [
+    ["get_sessions", (studio) => buildGetSessions(studio).handler({ limit: 5 } as never)],
+    ["get_gallery_stats", (studio) => buildGetGalleryStats(studio).handler({} as never)],
+    ["list_projects", (studio) => buildListProjects(studio).handler()],
+    ["get_project", (studio) => buildGetProject(studio).handler({ projectId: "p1" } as never)],
+    [
+      "duplicate_project",
+      (studio) => buildDuplicateProject(studio, CONFIG).handler({ projectId: "p1" }),
+    ],
+  ];
+
+  for (const [name, run] of cases) {
+    const { studio, calls } = fakeStudio({});
+    await run(studio);
+    const onSlowRoute = calls.filter(
+      (c) => c.path === "/api/projects" || c.path === "/api/sessions" || c.path === "/api/gallery"
+    );
+    assert.ok(onSlowRoute.length > 0, `${name} should call one of the 30 s routes`);
+    for (const call of onSlowRoute) {
+      assert.equal(
+        call.options?.timeoutMs,
+        SLOW_ROUTE_TIMEOUT_MS,
+        `${name} -> ${call.path} must wait for what that route is allowed to take`
+      );
+    }
+  }
+});
+
+test("a read that ran out of time says so, instead of blaming the Studio", () => {
+  // StudioClient.get raises its own AbortError as a 504, so this sentence is
+  // read by an operator whose request WE stopped waiting on. It used to fall
+  // to the 5xx branch and report "Dreambooth had a server error".
+  const error = studioErrorFor(504, "/api/sessions");
+  assert.equal(error.retryable, true, "repeating a GET is free");
+  assert.match(error.message, /took too long/i);
+  assert.match(error.message, /nothing was changed/i);
+  assert.doesNotMatch(error.message, /server error/i);
 });
 
 test("a write failure is never retryable, even at 500", async () => {

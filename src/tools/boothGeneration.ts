@@ -33,8 +33,18 @@ import type { JobContext } from "../jobs/store.js";
 export const BOOTH_GENERATE_TIMEOUT_MS = 330_000;
 /** draft-frames: maxDuration 300 for three sequential image generations. */
 export const DRAFT_FRAMES_TIMEOUT_MS = 310_000;
-/** projects/onboarding: a thumbnail render plus a few writes. */
-export const BOOTH_CREATE_TIMEOUT_MS = 60_000;
+/**
+ * projects/onboarding: a thumbnail render plus a few writes.
+ *
+ * 70 s against the route's declared `maxDuration = 60`, for the reason its two
+ * siblings above already follow (330 against 300, 310 against 300): the
+ * route's own 504 has to arrive before this client stops listening, or the
+ * only thing left to report about a booth-creating call is that it may have
+ * gone through. It was set to exactly 60 — a tie with the ceiling it was
+ * meant to outlast. Inside a background job, so the extra ten seconds are not
+ * a wait anyone sits through. See src/studio/budgets.ts.
+ */
+export const BOOTH_CREATE_TIMEOUT_MS = 70_000;
 /** A design or redraw job: one generate call plus margin. */
 export const BOOTH_JOB_MAX_RUNTIME_MS = 6 * 60_000;
 /** A create job: slug check, frames (≤5 min), picks, create, lookup. */
