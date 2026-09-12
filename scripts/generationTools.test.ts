@@ -9,8 +9,12 @@ import { SessionTokens } from "../src/auth/tokenStore.js";
 import { buildStartFrame } from "../src/tools/startFrame.js";
 import { buildRefineFrame } from "../src/tools/refineFrame.js";
 import { buildCheckGeneration } from "../src/tools/checkGeneration.js";
-import { buildSaveFrame } from "../src/tools/saveFrame.js";
-import { GENERATION_TIMEOUT_MS } from "../src/tools/frameGeneration.js";
+import { buildSaveFrame, SAVE_TIMEOUT_MS } from "../src/tools/saveFrame.js";
+import {
+  GENERATION_TIMEOUT_MS,
+  START_JOB_MAX_RUNTIME_MS,
+  THREAD_OPEN_TIMEOUT_MS,
+} from "../src/tools/frameGeneration.js";
 import { AUTH_REQUIRED_TOOLS, requiresAuth } from "../src/mcp/toolAuth.js";
 import { ownerKeyFor } from "../src/jobs/store.js";
 import type { Config } from "../src/config.js";
@@ -225,7 +229,14 @@ test("start_frame opens a thread then generates in it, forwarding nothing invent
   // abort every generation at 15 s and report "may have gone through".
   assert.equal(calls[1].options?.timeoutMs, GENERATION_TIMEOUT_MS);
   assert.ok(GENERATION_TIMEOUT_MS >= 120_000, "at least the Studio route's own ceiling");
-  assert.equal(calls[0].options?.timeoutMs, undefined, "opening the thread is a normal call");
+  // Opening the thread is one insert, but the route it hits is rarely
+  // called and therefore usually cold; 15 s is a budget for the work, not
+  // for the serverless start in front of it.
+  assert.equal(calls[0].options?.timeoutMs, THREAD_OPEN_TIMEOUT_MS);
+  assert.ok(
+    START_JOB_MAX_RUNTIME_MS > THREAD_OPEN_TIMEOUT_MS + GENERATION_TIMEOUT_MS,
+    "the sweep must be a backstop, not a race with the job's own timeouts"
+  );
 });
 
 test("start_frame returns a handle and says nothing exists yet", async () => {
@@ -366,6 +377,38 @@ test("a failed generation relays a Studio HTTP refusal verbatim", async () => {
   assert.match(String(done.error), /read-only/);
 });
 
+test("an image the Studio could not upload is dropped, not relayed", async () => {
+  /**
+   * `persistAiGenerationImageUrls` keeps the model's own output when its
+   * upload fails, so `imageUrls[0]` can be a `data:image/png;base64,…` string
+   * megabytes long. Relaying that puts it in the model's context and in the
+   * client's stored result, where a preview nobody can read costs more than
+   * the conversation around it. The generation is real, so the flow must
+   * continue without it — not fail, and not carry it.
+   */
+  const { studio } = fakeStudio((path) => {
+    if (path === "/api/ai/frames/start") return THREAD;
+    return {
+      generation: { _id: "g7", status: "completed" },
+      message: { content: "Generated options ready. You can apply or iterate." },
+      imageUrls: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUg"],
+    };
+  });
+  const start = buildStartFrame(studio);
+  const check = buildCheckGeneration(studio, CONFIG);
+
+  const started = await start.handler({ prompt: "batik", layout: "strip-3" });
+  await drained();
+
+  const done = await check.handler({ jobId: started.jobId });
+  assert.equal(done.state, "done", "the generation happened");
+  assert.equal(done.generationId, "g7", "and can still be refined or saved");
+  assert.equal(done.threadId, "t1");
+  assert.equal(done.imageUrl, undefined, "but its address is not passed on");
+  assert.match(String(done.note), /nothing to show/i);
+  assert.match(String(done.note), /save_frame/);
+});
+
 test("an unknown job id points at the thread and the dashboard instead of claiming failure", async () => {
   const { studio } = fakeStudio(() => ({}));
   const check = buildCheckGeneration(studio, CONFIG);
@@ -417,6 +460,25 @@ test("save_frame sends only the fields it declares and reports the frame", async
   assert.equal(result.frameId, "f1");
   assert.equal(result.placeholderCount, 6);
   assert.equal(result.dashboardUrl, "https://studio.example/dashboard/frames/f1");
+});
+
+test("save_frame gets the Studio route's budget, not the interactive one", async () => {
+  const { studio, calls } = fakeStudio(() => ({ frameId: "f1" }));
+  const save = buildSaveFrame(studio, CONFIG);
+  await save.handler({ threadId: "t1", generationId: "g9" });
+
+  /**
+   * A live write check failed here at 15 s. The route declares
+   * `maxDuration = 60` because it pays for a cold serverless start carrying
+   * sharp, a first Mongo handshake, a ~2 MB download and a ~9 MB upload — the
+   * picture work itself is under a second. Asserting the two bounds rather
+   * than the number: above the interactive ceiling, and below the MCP
+   * client's own default, because this tool blocks and a call the client
+   * abandons first is a hang with no sentence attached.
+   */
+  assert.equal(calls[0].options?.timeoutMs, SAVE_TIMEOUT_MS);
+  assert.ok(SAVE_TIMEOUT_MS > CONFIG.requestTimeoutMs, "more than an interactive call");
+  assert.ok(SAVE_TIMEOUT_MS < 60_000, "less than the MCP client's default request timeout");
 });
 
 /* ------------------------------------------------ the published schema --- */

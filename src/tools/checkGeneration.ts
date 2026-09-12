@@ -233,7 +233,12 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
         canvasWidth: result?.canvasWidth,
         canvasHeight: result?.canvasHeight,
         placeholderCount: result?.placeholderCount,
-        note: "This is a preview in the design thread, not a saved frame. Show it to the operator; refine_frame changes it, save_frame keeps it.",
+        // A generation with no address is still a generation: it can be
+        // refined and it can be saved, it just cannot be shown here. Saying
+        // so beats an empty card the model describes as a picture.
+        note: result?.imageUrl
+          ? "This is a preview in the design thread, not a saved frame. Show it to the operator; refine_frame changes it, save_frame keeps it."
+          : "The generation finished but Dreambooth could not give the image a viewable address, so there is nothing to show. It can still be refined with refine_frame or kept with save_frame, and the saved frame will appear in the dashboard.",
       };
     },
   };

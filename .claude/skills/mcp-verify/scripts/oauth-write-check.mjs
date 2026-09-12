@@ -217,7 +217,19 @@ ok(Number(granted.expires_in) > 0 && Number(granted.expires_in) <= 3600,
 
 // ---- 4. do the writes -------------------------------------------------------
 
+/**
+ * How long every tool call took, in order.
+ *
+ * Added because this script watched `save_frame` fail on a 15 s ceiling for a
+ * Studio route that budgets 60 s, and had nothing to say about it beyond
+ * "did not answer in time". A synchronous write is bounded by a timeout the
+ * connector chose; the only way to know the choice is still right is to see
+ * how close each call runs to it. Printed at the end, slowest first.
+ */
+const timings = [];
+
 async function call(name, args) {
+  const startedAt = Date.now();
   const res = await fetch(`${BASE}/mcp`, {
     method: "POST",
     headers: {
@@ -233,6 +245,7 @@ async function call(name, args) {
     if (line.startsWith("data: ")) { parsed = JSON.parse(line.slice(6)); break; }
   }
   if (parsed === null) parsed = text.trim() ? JSON.parse(text.trim()) : null;
+  timings.push({ name, ms: Date.now() - startedAt });
   capture(name, parsed);
   return parsed;
 }
@@ -525,6 +538,21 @@ if (WITH_BOOTH) {
       }
     }
   }
+}
+
+/**
+ * The slowest calls, because a passing run is the only chance to see how much
+ * headroom is left. `check_generation` is excluded: it is a memory read
+ * repeated dozens of times and would fill the list with noise.
+ */
+const slowest = timings
+  .filter((t) => t.name !== "check_generation")
+  .sort((a, b) => b.ms - a.ms)
+  .slice(0, 5);
+if (slowest.length) {
+  console.log("");
+  console.log("  slowest calls (a synchronous write must finish inside its own timeout)");
+  for (const t of slowest) console.log(`  ${String(t.ms).padStart(7)} ms  ${t.name}`);
 }
 
 console.log("");

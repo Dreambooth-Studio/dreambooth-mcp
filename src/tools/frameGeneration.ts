@@ -36,6 +36,32 @@ import { StudioError } from "../studio/errors.js";
 export const GENERATION_TIMEOUT_MS = 150_000;
 
 /**
+ * How long `POST /api/ai/frames/start` may take to open the thread.
+ *
+ * No image model in that call — a template lookup and one insert — so 15 s
+ * looks generous until the Studio route is cold: a serverless function that
+ * has not run recently pays for its own start and for the first Mongo
+ * handshake before any of the work begins. `save_frame` was measured failing
+ * at 15 s for exactly that reason, on a route whose work takes under a second.
+ * This one is inside a background job, so a longer ceiling costs nothing that
+ * anybody is waiting on.
+ */
+export const THREAD_OPEN_TIMEOUT_MS = 30_000;
+
+/**
+ * The ceiling on the whole `start_frame` job — open the thread, then generate
+ * in it — stated rather than inherited.
+ *
+ * The job store presumes a job dead after three minutes, and three minutes is
+ * EXACTLY the sum of the two calls above. A job that used both of its
+ * timeouts would be swept in the same instant its own failure arrived, and the
+ * operator would be told it "stopped reporting" instead of what went wrong.
+ * The slack is what keeps the sweep a backstop rather than a race.
+ */
+export const START_JOB_MAX_RUNTIME_MS =
+  THREAD_OPEN_TIMEOUT_MS + GENERATION_TIMEOUT_MS + 15_000;
+
+/**
  * The layouts an operator can ask for, in their words.
  *
  * Each resolves SERVER-SIDE to one of the Studio's blank templates — this is
@@ -73,7 +99,11 @@ export interface FrameThread {
  */
 export interface GenerationResult extends FrameThread {
   generationId: string;
-  imageUrl: string;
+  /**
+   * Absent when the Studio produced an image it could not give an address to;
+   * see `sendFramePrompt`. The generation is still real and still saveable.
+   */
+  imageUrl?: string;
 }
 
 /** The shapes POST /api/ai/threads/{threadId}/messages answers with. */
@@ -101,7 +131,7 @@ export async function sendFramePrompt(
   studio: StudioClient,
   threadId: string,
   prompt: string
-): Promise<{ generationId: string; imageUrl: string }> {
+): Promise<{ generationId: string; imageUrl?: string }> {
   const reply = await studio.post<MessagesReply>(
     `/api/ai/threads/${encodeURIComponent(threadId)}/messages`,
     // generationRequestId is the Studio's idempotency key for this turn; the
@@ -122,8 +152,8 @@ export async function sendFramePrompt(
   }
 
   const generationId = reply?.generation?._id;
-  const imageUrl = reply?.imageUrls?.[0];
-  if (!generationId || !imageUrl) {
+  const returned = reply?.imageUrls?.[0];
+  if (!generationId || !returned) {
     throw new StudioError(
       reply?.message?.content?.trim() ||
         "The model returned no image this time. Try rephrasing the description, or generate again.",
@@ -131,6 +161,20 @@ export async function sendFramePrompt(
       false
     );
   }
+
+  /**
+   * Only an addressable image leaves this function.
+   *
+   * The Studio uploads each generated image and answers with its URL, but when
+   * that upload fails it keeps the model's own output instead — a
+   * `data:image/png;base64,…` string several megabytes long. Relayed, that
+   * lands in the model's context and in every client's stored tool result, and
+   * a preview nobody can read costs more than the whole conversation around
+   * it. The generation itself is real and `save_frame` can still keep it, so
+   * this drops the address rather than the result: the poll says a preview
+   * cannot be shown, and the flow continues.
+   */
+  const imageUrl = returned.startsWith("https://") ? returned : undefined;
   return { generationId: String(generationId), imageUrl };
 }
 

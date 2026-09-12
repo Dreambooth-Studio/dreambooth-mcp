@@ -7,6 +7,8 @@ import {
   FRAME_LAYOUT_KEYS,
   FRAME_SHAPES,
   STARTED_NOTE,
+  START_JOB_MAX_RUNTIME_MS,
+  THREAD_OPEN_TIMEOUT_MS,
   labelFor,
   sendFramePrompt,
   type FrameLayout,
@@ -95,37 +97,47 @@ export function buildStartFrame(studio: StudioClient) {
       const what = labelFor(args.prompt);
 
       try {
-        const job = jobs.start<GenerationResult>(ownerKey, what, async () => {
-          /**
-           * Built field by field, never spread from `args`. A spread would
-           * forward anything the model invented, `ownerEmail` above all — which
-           * the Studio refuses outright, but which should never leave this
-           * process.
-           */
-          const thread = await studio.post<FrameThread>("/api/ai/frames/start", {
-            layout: args.layout,
-            shape: args.shape,
-          });
-          if (!thread?.threadId) {
-            throw new StudioError(
-              "Dreambooth did not open a design thread. Nothing was generated; try again in a moment.",
-              502,
-              false
+        const job = jobs.start<GenerationResult>(
+          ownerKey,
+          what,
+          async () => {
+            /**
+             * Built field by field, never spread from `args`. A spread would
+             * forward anything the model invented, `ownerEmail` above all — which
+             * the Studio refuses outright, but which should never leave this
+             * process.
+             */
+            const thread = await studio.post<FrameThread>(
+              "/api/ai/frames/start",
+              {
+                layout: args.layout,
+                shape: args.shape,
+              },
+              {},
+              { timeoutMs: THREAD_OPEN_TIMEOUT_MS }
             );
-          }
-          const generated = await sendFramePrompt(studio, thread.threadId, args.prompt);
-          return {
-            threadId: thread.threadId,
-            templateId: thread.templateId,
-            layout: thread.layout ?? args.layout,
-            shape: thread.shape,
-            canvasWidth: thread.canvasWidth,
-            canvasHeight: thread.canvasHeight,
-            placeholderCount: thread.placeholderCount,
-            generationId: generated.generationId,
-            imageUrl: generated.imageUrl,
-          };
-        });
+            if (!thread?.threadId) {
+              throw new StudioError(
+                "Dreambooth did not open a design thread. Nothing was generated; try again in a moment.",
+                502,
+                false
+              );
+            }
+            const generated = await sendFramePrompt(studio, thread.threadId, args.prompt);
+            return {
+              threadId: thread.threadId,
+              templateId: thread.templateId,
+              layout: thread.layout ?? args.layout,
+              shape: thread.shape,
+              canvasWidth: thread.canvasWidth,
+              canvasHeight: thread.canvasHeight,
+              placeholderCount: thread.placeholderCount,
+              generationId: generated.generationId,
+              imageUrl: generated.imageUrl,
+            };
+          },
+          { maxRuntimeMs: START_JOB_MAX_RUNTIME_MS }
+        );
 
         return {
           kind: "generation" as const,
