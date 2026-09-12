@@ -61,7 +61,23 @@ screenSize: z.object({ width: z.number().optional(), height: z.number().optional
   .catch(undefined)   // documented shape, but degrades instead of throwing
 ```
 
-The generated JSON Schema still carries the documented shape, so the model learns what to expect — but an unexpected value becomes `undefined` rather than a protocol error.
+The generated JSON Schema still carries the documented shape, so the model learns what to expect.
+
+**But `.catch()` on its own does not stop the protocol error, and this is the part that is easy to get wrong.** The server validates `structuredContent` against the zod object and then sends the ORIGINAL object — not what zod parsed. So the catch stops the SERVER throwing and never touches the wire; the CLIENT then validates that payload against the published JSON Schema, where the field is still declared a number, and raises the same `-32602` one hop later. Verified in this repo: a test written to prove `.catch()` was enough failed with
+
+```
+MCP error -32602: Structured content does not match the tool's output schema:
+data/buckets/1/revenue must be number
+```
+
+So the handler has to **emit what it publishes** — parse the upstream body through the schema and return the result:
+
+```ts
+const parsed = outputObject.safeParse(body);
+return parsed.success ? parsed.data : {};
+```
+
+That is also the only thing that protects a passthrough from `additionalProperties: false`: a handler that forwards the upstream body verbatim breaks the moment that route learns a new field, in a deploy that never touched the connector.
 
 **Nothing type-checks an outputSchema against the handler's return.** A real example from this repo: a field was declared `z.string()` while the interface twenty lines below in the same file correctly typed it `{ width, height }`. `tsc` passed, both smoke tests passed, and only a real call against real data caught it — because the smokes never reached that tool's success path.
 
