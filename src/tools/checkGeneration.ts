@@ -185,6 +185,18 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
       }
 
       if (job.state === "failed") {
+        /**
+         * A failed frame job may still have opened its design thread — the
+         * refusal usually lands on the generation, not on the thread. Naming
+         * it costs nothing and saves the alternative, which is `start_frame`
+         * again and a second empty thread on the account.
+         *
+         * The note only says the thread is there. What to do about it depends
+         * on WHY this failed, and the Studio's own sentence above already says
+         * that better than a rule here could: a used-up daily allowance is not
+         * a prompt to rewrite, and a refused description is.
+         */
+        const threadId = job.kind === "generation" ? job.ref : undefined;
         return {
           ...base,
           state: "failed",
@@ -192,6 +204,10 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
           // allowance says when it resets, a taken link name says to pick
           // another — which is the thing the operator actually needs.
           error: job.error?.message ?? `The ${KIND_LABEL[job.kind]} failed.`,
+          threadId,
+          note: threadId
+            ? "The design thread is open, and nothing was saved. If the message above is about the description rather than the daily allowance, refine_frame can try a different one in this same thread instead of starting over."
+            : undefined,
         };
       }
 

@@ -350,7 +350,7 @@ test("a rebuild narrates the Studio's progress steps into the job", async () => 
     return DRAFT_REPLY;
   });
   const seen: string[] = [];
-  const ctx: JobContext = { jobId: "j", progress: (t) => seen.push(t) };
+  const ctx: JobContext = { jobId: "j", progress: (t) => seen.push(t), ref: () => {} };
 
   const result = await withDraftProgress(
     studio,
@@ -421,7 +421,11 @@ test("pickStarterFrames matches the draft's words first, then popularity order",
 /* --------------------------------------------------------------- create --- */
 
 const CREATE_ARGS = { draftId: DRAFT_ID, title: "Bandung Wedding", slug: "bandung-wedding" };
-const ctxOf = (seen: string[]): JobContext => ({ jobId: "j", progress: (t) => seen.push(t) });
+const ctxOf = (seen: string[]): JobContext => ({
+  jobId: "j",
+  progress: (t) => seen.push(t),
+  ref: () => {},
+});
 const noSleep = async () => {};
 
 /** A Studio that answers every stage of a create happily. */

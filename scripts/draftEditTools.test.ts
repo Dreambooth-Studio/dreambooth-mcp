@@ -79,7 +79,11 @@ function fakeStudio(reply: Reply) {
   return { studio, calls };
 }
 
-const ctxOf = (seen: string[]): JobContext => ({ jobId: "j", progress: (t) => seen.push(t) });
+const ctxOf = (seen: string[]): JobContext => ({
+  jobId: "j",
+  progress: (t) => seen.push(t),
+  ref: () => {},
+});
 const noSleep = async () => {};
 
 /* ----------------------------------------------------------------- read --- */
