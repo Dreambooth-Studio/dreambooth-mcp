@@ -154,25 +154,28 @@ test("the 401 challenge names the scopes a client may request", () => {
  */
 
 /**
- * Seventeen, not the twenty-two this list held when it was written.
+ * Twenty-two. It was seventeen between 2026-09-23 morning and afternoon, while
+ * the booth tools were withdrawn: the Studio's `digital_mode` flag was off and
+ * every route they call answered 404. The flag is on, the flow was proven end
+ * to end against production (37 checks, `create_booth` completing for the first
+ * time), and `BOOTH_TOOLS_LIVE` is true again.
  *
- * `start_booth`, `refine_booth`, `create_booth`, `get_booth_draft` and
- * `update_booth_draft` came out while `BOOTH_TOOLS_LIVE` is false: every route
- * they call is gated on the Studio's `digital_mode` flag, which is off, so they
- * 404 for everyone. This list is spelled out precisely so that change could not
- * happen quietly — it failed here first, which is the whole point of writing
- * the names down instead of comparing the server to itself.
+ * Spelled out precisely so neither direction can happen quietly. Both times the
+ * list changed, this test failed first, which is the whole reason the names are
+ * written down rather than derived from the server.
  *
- * `docs/submission/build_submission_import.py` declares the same seventeen. If
- * these two ever disagree, the submission names a tool the portal cannot scan
- * and the import is refused.
+ * `docs/submission/build_submission_import.py` declares the same set. If the
+ * two disagree, the submission names a tool the portal cannot scan and the
+ * import is refused.
  */
 const EXPECTED_TOOLS = [
   "check_generation",
   "connect_account",
   "connection_status",
+  "create_booth",
   "create_filter",
   "duplicate_project",
+  "get_booth_draft",
   "get_credits",
   "get_gallery_stats",
   "get_project",
@@ -181,10 +184,13 @@ const EXPECTED_TOOLS = [
   "get_wallet_transactions",
   "list_projects",
   "preview_filter",
+  "refine_booth",
   "refine_frame",
   "save_frame",
   "search_docs",
+  "start_booth",
   "start_frame",
+  "update_booth_draft",
 ];
 
 const EXPECTED_WIDGETS = [

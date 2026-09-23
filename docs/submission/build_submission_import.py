@@ -301,7 +301,7 @@ def case(c):
 #
 # Flip both constants together when the flag ships, and run the booth flow end
 # to end against production before resubmitting with the booth case back in.
-BOOTH_TOOLS_LIVE = False
+BOOTH_TOOLS_LIVE = True
 BOOTH_TOOLS = {
     "start_booth", "refine_booth", "create_booth",
     "get_booth_draft", "update_booth_draft",

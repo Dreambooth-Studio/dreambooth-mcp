@@ -2,35 +2,34 @@
 
 ## portal/ — what to upload
 
-**Two** PNGs, each exactly **706 x 860**: a frame preview and a filter preview.
-Build them with
+**Four** PNGs, each exactly **706 x 860**: a booth draft, a frame preview, a
+filter preview and a created booth. Four is the portal's cap. Build them with
 
-    npx tsx .screenshots/build/build_cards.ts
-    node .screenshots/build/render_portal.js .screenshots/portal
+    CAPTURE_DIR=.screenshots/build/real-booth npx tsx .screenshots/build/build_cards_real.ts
+    CARDS_DIR=.screenshots/build/cards-real node .screenshots/build/render_portal.js .screenshots/portal
 
-It was three until 2026-09-23. The booth draft is in `parked/` because the app
-no longer offers it: `BOOTH_TOOLS_LIVE` is false in `src/mcp/server.ts` while
-the Studio's `digital_mode` flag is off, so `start_booth` is not registered and
-a card showing a booth draft is a picture of a feature a reviewer cannot reach.
-That is the one thing the plugin guidelines are explicit about — screenshots
-"must accurately represent the plugin's functionality" — so it comes out rather
-than being left in as the prettiest of the three.
+All four come from `build/real-booth`, the 2026-09-23 OAuth write check: 37
+checks, 0 failures, against the production Studio. That run is the first that
+ever got `create_booth` to complete, so `04-booth-created.png` exists for the
+first time - "Booth created", Garden Gold, the real welcome screen with its
+`Mulai` button. The 2026-09-07 run in `build/real` is kept as the earlier
+evidence; it stopped at 64 seconds with the booth still being created.
 
-A fourth, the created booth, was never built at all: `build_cards_real.ts`
-renders only what the capture run reached, and the 2026-09-07 run stopped before
-`create_booth`. Worth remembering when booths come back, because it means that
-path has never produced a verified artifact.
+The set was briefly **two** on 2026-09-23, while the booth tools were withdrawn
+and a card showing a booth draft would have been a picture of a feature a
+reviewer could not reach. `digital_mode` went live the same day and they are
+back.
 
-When `digital_mode` ships: flip `BOOTH_TOOLS_LIVE`, run the capture again so it
-reaches `create_booth`, and move `parked/booth-draft.png` back — renumbered, or
-regenerated, but not reused blind. The parked card shows Garden Gold at
-`dreambooth.app/gardengold`, which will not be the booth the new run makes.
+Note the portal attaches screenshots **per starter prompt**, and there are three
+prompts. `04-booth-created.png` therefore has no prompt slot: use it wherever
+the listing takes app-level images, or swap it in for `01`.
 
 The portal's rule is 706 px wide, 400-860 px high, at most 4 images, and the
 plugin guidelines add that screenshots "must accurately represent the plugin's
 functionality and comply with the required dimensions" — they are **optional**,
-so a small correct set beats a large flawed one. Two accurate images is a
-better submission than three where one shows a tool that is not there.
+so a small correct set beats a large flawed one. The rule that decides the
+count is accuracy, not quantity: four when every card shows something a
+reviewer can reach, two when one of them would not.
 
 `render_portal.js` puts the card on a 353x430 CSS stage (706x860 at 2x) and
 **scales it down until the whole card fits**. That is the difference from the
