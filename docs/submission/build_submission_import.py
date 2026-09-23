@@ -284,10 +284,38 @@ def case(c):
         "expected_output_url": None,
     }
 
+# ------------------------------------------------- what the server registers
+# Mirrors BOOTH_TOOLS_LIVE in src/mcp/server.ts, and must not drift from it.
+#
+# While that constant is false those five tools are not registered, so the
+# submission must not name them. Two separate reasons, either one sufficient:
+# the importer refuses a file naming a tool the portal has not scanned (see the
+# header note on the 2026-08-23 imports), and a reviewer running a test case for
+# a tool that is not in the list finds it missing.
+#
+# The Studio's `digital_mode` flag is why. It gates /api/onboarding/* and
+# /api/projects/onboarding, it is off in production, and the check runs before
+# auth, so those routes 404 for everyone:
+#
+#     curl https://dreamboothstudio.com/api/onboarding/catalog
+#
+# Flip both constants together when the flag ships, and run the booth flow end
+# to end against production before resubmitting with the booth case back in.
+BOOTH_TOOLS_LIVE = False
+BOOTH_TOOLS = {
+    "start_booth", "refine_booth", "create_booth",
+    "get_booth_draft", "update_booth_draft",
+}
+
 # ------------------------------------------------------------------ assemble
 # Tools the portal has not scanned yet can be left out for an interim import:
 #   CHATGPT_SUBMISSION_EXCLUDE="get_booth_draft,update_booth_draft" python build_submission_import.py
 EXCLUDE = {t.strip() for t in os.environ.get("CHATGPT_SUBMISSION_EXCLUDE", "").split(",") if t.strip()}
+# Not only from the environment: with the booth tools unregistered, the
+# default run has to produce the right file without anyone remembering a
+# variable.
+if not BOOTH_TOOLS_LIVE:
+    EXCLUDE |= BOOTH_TOOLS
 for t in EXCLUDE:
     assert t in ANN, f"CHATGPT_SUBMISSION_EXCLUDE names an unknown tool: {t}"
     del ANN[t]
@@ -297,7 +325,42 @@ def without_excluded(tools_triggered):
     return ", ".join(kept)
 for c in POSITIVE:
     c["tools_triggered"] = without_excluded(c["tools_triggered"])
-if "update_booth_draft" in EXCLUDE:
+if BOOTH_TOOLS <= EXCLUDE:
+    # Every booth tool is gone, so the case built on them goes too rather than
+    # being trimmed down to a "check_generation" nobody can trigger. The
+    # importer wants exactly five, so the duplicate case is promoted ahead of
+    # the booths-online one: it is the only write case left that is not a
+    # filter or a frame, and it exercises resolving a booth by name to an id.
+    POSITIVE[:] = [c for c in POSITIVE if not c["tools_triggered"].startswith("check_generation")]
+    dup = next(i for i, c in enumerate(POSITIVE) if "duplicate_project" in c["tools_triggered"])
+    online = next(i for i, c in enumerate(POSITIVE) if c["tools_triggered"] == "list_projects, get_project")
+    if dup > online:
+        POSITIVE.insert(online, POSITIVE.pop(dup))
+    # Three things, not four. The copy has to describe what the app can do.
+    APP_INFO["description"] = APP_INFO["description"].replace(
+        "It can make four things for you: a photo filter you preview before it is created, "
+        "a photo frame designed from a description and refined in conversation, "
+        "a whole booth designed from a description, adjusted in conversation and created at its own link, "
+        "and a copy of a booth you already run.",
+        "It can make three things for you: a photo filter you preview before it is created, "
+        "a photo frame designed from a description and refined in conversation, "
+        "and a copy of a booth you already run.",
+    ).replace("It cannot edit a booth that already exists,", "It cannot create a booth from scratch or edit one that exists,")
+    for c in NEGATIVE:
+        c["expected_output"] = c["expected_output"].replace(
+            "The write scope covers creating a filter, a frame, a booth from a design "
+            "(and adjusting that draft before it is created), and a copy of a booth, and nothing else;",
+            "The write scope covers creating a filter, a frame, and a copy of a booth, and nothing else;",
+        ).replace(
+            "it points at the dashboard, and must not offer refine_booth or update_booth_draft "
+            "(drafts only) or duplicate_project as a substitute.",
+            "it points at the dashboard, and must not offer duplicate_project as a substitute.",
+        ).replace(
+            "refine_booth works on DRAFTS from start_booth only and must not be offered for an "
+            "existing booth, and duplicate_project must not be offered as a substitute for an edit.",
+            "duplicate_project must not be offered as a substitute for an edit.",
+        )
+elif "update_booth_draft" in EXCLUDE:
     # The copy must describe what the portal can see today.
     APP_INFO["description"] = APP_INFO["description"].replace(
         "a whole booth designed from a description, adjusted in conversation and created at its own link",

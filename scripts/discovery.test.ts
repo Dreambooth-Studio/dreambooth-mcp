@@ -153,14 +153,26 @@ test("the 401 challenge names the scopes a client may request", () => {
  * whatever the server does. A number has to be edited by whoever changes it.
  */
 
+/**
+ * Seventeen, not the twenty-two this list held when it was written.
+ *
+ * `start_booth`, `refine_booth`, `create_booth`, `get_booth_draft` and
+ * `update_booth_draft` came out while `BOOTH_TOOLS_LIVE` is false: every route
+ * they call is gated on the Studio's `digital_mode` flag, which is off, so they
+ * 404 for everyone. This list is spelled out precisely so that change could not
+ * happen quietly — it failed here first, which is the whole point of writing
+ * the names down instead of comparing the server to itself.
+ *
+ * `docs/submission/build_submission_import.py` declares the same seventeen. If
+ * these two ever disagree, the submission names a tool the portal cannot scan
+ * and the import is refused.
+ */
 const EXPECTED_TOOLS = [
   "check_generation",
   "connect_account",
   "connection_status",
-  "create_booth",
   "create_filter",
   "duplicate_project",
-  "get_booth_draft",
   "get_credits",
   "get_gallery_stats",
   "get_project",
@@ -169,13 +181,10 @@ const EXPECTED_TOOLS = [
   "get_wallet_transactions",
   "list_projects",
   "preview_filter",
-  "refine_booth",
   "refine_frame",
   "save_frame",
   "search_docs",
-  "start_booth",
   "start_frame",
-  "update_booth_draft",
 ];
 
 const EXPECTED_WIDGETS = [

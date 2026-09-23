@@ -202,6 +202,44 @@ const EDITS_DRAFT = {
   openWorldHint: true,
 } as const;
 
+/**
+ * Booth design and creation, held back until the Studio can serve them.
+ *
+ * `start_booth`, `refine_booth`, `create_booth`, `get_booth_draft` and
+ * `update_booth_draft` all reach `/api/onboarding/*` or
+ * `/api/projects/onboarding`, and every one of those routes is gated on the
+ * Studio's `digital_mode` feature flag. The flag is OFF in production and its
+ * check is the FIRST statement in each handler, before auth, so the routes
+ * answer 404 `{"error":"Not found"}` to everyone — verifiable without a token:
+ *
+ *     curl https://dreamboothstudio.com/api/onboarding/catalog
+ *
+ * `boothErrorFor` already turns that into an honest sentence ("Booth
+ * generation is not enabled on this Dreambooth right now"), so nothing was
+ * broken. But a connector that lists five tools which cannot work, and a
+ * directory submission whose headline test case is designing a booth, is a
+ * promise the product cannot keep — it is what the v2.0.0 review ran into.
+ *
+ * There is no staged middle ground to reach for: `isFlagLive` returns true as
+ * soon as a flag's allow-list is non-empty, and these routes call the
+ * identity-free `isFeatureLive`, so allow-listing one tester email would open
+ * the onboarding endpoints for everyone. The flag is all or nothing, and
+ * turning it on is a launch of the consumer web booth and the dashboard's
+ * publish toggle — a product decision, not a submission fix.
+ *
+ * A plain constant rather than an environment variable, deliberately: this is
+ * not a per-environment difference, it is a fact about what the Studio serves
+ * today. Flipping it back to `true` is the whole of the work when
+ * `digital_mode` ships — and the booth flow should be run end to end against
+ * production first, which has never been done.
+ *
+ * Note what this is NOT: it does not vary per connection, so it does not
+ * reintroduce what the note above the write tools exists to prevent. Every
+ * caller is shown the same inventory; a compile-time constant keeps that true.
+ */
+export const BOOTH_TOOLS_LIVE = false;
+
+
 export function createServer(
   config: Config,
   tokens: SessionTokens,
@@ -526,12 +564,9 @@ export function createServer(
     safe(saveFrame.handler),
   );
   /**
-   * Booths follow the frame shape, through the /new pipeline: a design job
-   * (`start_booth`), redraws in the same draft (`refine_booth`), one poll for
-   * all of it (`check_generation`), and a create job that makes the booth
-   * real (`create_booth`) — the only step that puts something in the
-   * operator's booth list. `preview_filter` is the read-only half of filter
-   * design: it renders, `create_filter` saves.
+   * `preview_filter` is the read-only half of filter design: it renders,
+   * `create_filter` saves. It stays whatever the booth tools are doing —
+   * `/api/filters/preview` carries no feature flag and answers today.
    */
   const previewFilter = buildPreviewFilter(studio);
   server.registerTool(
@@ -547,65 +582,69 @@ export function createServer(
     safe(previewFilter.handler),
   );
 
-  const startBooth = buildStartBooth(studio);
-  server.registerTool(
-    startBooth.name,
-    withWidget(
-      { ...startBooth.config, annotations: CREATES },
-      GENERATION_WIDGET_URI,
-      { invoking: "Merancang booth…", invoked: "Sedang merancang booth" },
-    ),
-    safe(startBooth.handler),
-  );
+  // See BOOTH_TOOLS_LIVE: these five are 404 on the Studio until
+  // `digital_mode` is live, so they are not advertised.
+  if (BOOTH_TOOLS_LIVE) {
+    const startBooth = buildStartBooth(studio);
+    server.registerTool(
+      startBooth.name,
+      withWidget(
+        { ...startBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Merancang booth…", invoked: "Sedang merancang booth" },
+      ),
+      safe(startBooth.handler),
+    );
 
-  const refineBooth = buildRefineBooth(studio);
-  server.registerTool(
-    refineBooth.name,
-    withWidget(
-      { ...refineBooth.config, annotations: CREATES },
-      GENERATION_WIDGET_URI,
-      { invoking: "Mengubah rancangan…", invoked: "Sedang mengubah rancangan" },
-    ),
-    safe(refineBooth.handler),
-  );
+    const refineBooth = buildRefineBooth(studio);
+    server.registerTool(
+      refineBooth.name,
+      withWidget(
+        { ...refineBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengubah rancangan…", invoked: "Sedang mengubah rancangan" },
+      ),
+      safe(refineBooth.handler),
+    );
 
-  const createBooth = buildCreateBooth(studio, config);
-  server.registerTool(
-    createBooth.name,
-    withWidget(
-      { ...createBooth.config, annotations: CREATES },
-      GENERATION_WIDGET_URI,
-      { invoking: "Membuat booth…", invoked: "Sedang membuat booth" },
-    ),
-    safe(createBooth.handler),
-  );
+    const createBooth = buildCreateBooth(studio, config);
+    server.registerTool(
+      createBooth.name,
+      withWidget(
+        { ...createBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Membuat booth…", invoked: "Sedang membuat booth" },
+      ),
+      safe(createBooth.handler),
+    );
 
-  /**
-   * The other two levers on a draft: read it back (the job store forgets,
-   * the Studio does not) and change what a redraw cannot — settings, text,
-   * colours, frames, filters, effect — before create_booth applies them.
-   */
-  const getBoothDraft = buildGetBoothDraft(studio);
-  server.registerTool(
-    getBoothDraft.name,
-    withWidget(
-      { ...getBoothDraft.config, annotations: READ_ONLY },
-      GENERATION_WIDGET_URI,
-      { invoking: "Membaca rancangan…", invoked: "Rancangan booth" },
-    ),
-    safe(getBoothDraft.handler),
-  );
+    /**
+     * The other two levers on a draft: read it back (the job store forgets,
+     * the Studio does not) and change what a redraw cannot — settings, text,
+     * colours, frames, filters, effect — before create_booth applies them.
+     */
+    const getBoothDraft = buildGetBoothDraft(studio);
+    server.registerTool(
+      getBoothDraft.name,
+      withWidget(
+        { ...getBoothDraft.config, annotations: READ_ONLY },
+        GENERATION_WIDGET_URI,
+        { invoking: "Membaca rancangan…", invoked: "Rancangan booth" },
+      ),
+      safe(getBoothDraft.handler),
+    );
 
-  const updateBoothDraft = buildUpdateBoothDraft(studio);
-  server.registerTool(
-    updateBoothDraft.name,
-    withWidget(
-      { ...updateBoothDraft.config, annotations: EDITS_DRAFT },
-      GENERATION_WIDGET_URI,
-      { invoking: "Mengubah rancangan…", invoked: "Rancangan diperbarui" },
-    ),
-    safe(updateBoothDraft.handler),
-  );
+    const updateBoothDraft = buildUpdateBoothDraft(studio);
+    server.registerTool(
+      updateBoothDraft.name,
+      withWidget(
+        { ...updateBoothDraft.config, annotations: EDITS_DRAFT },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengubah rancangan…", invoked: "Rancangan diperbarui" },
+      ),
+      safe(updateBoothDraft.handler),
+    );
+  }
 
   return server;
 }
