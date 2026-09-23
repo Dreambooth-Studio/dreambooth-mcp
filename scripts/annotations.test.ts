@@ -36,7 +36,6 @@ async function advertised() {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });

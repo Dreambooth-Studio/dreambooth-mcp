@@ -19,10 +19,12 @@ export const AUTH_REQUIRED_TOOLS = new Set([
   "get_revenue_summary",
   "get_credits",
   "get_wallet_transactions",
-  // The write tools are registered only when a request already carries a
-  // bearer (see createServer), so a call without one would otherwise come back
-  // as "unknown tool" — which tells the client nothing and starts no sign-in.
-  // Listing them here turns that into the 401 that begins the OAuth flow.
+  // The write tools are advertised on every connection, credentialled or not
+  // (see createServer), so this list is the only thing between an
+  // uncredentialled call and the Studio. Without it the call would arrive
+  // tokenless and come back "no account is connected" — which reads as a
+  // failure and starts no sign-in. Listing them here makes it the 401 that
+  // begins the OAuth flow instead.
   "create_filter",
   "duplicate_project",
   "start_frame",

@@ -136,7 +136,7 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
     config: {
       title: "Check background work",
       description:
-        "Report on background work started by start_frame, refine_frame, start_booth, refine_booth or create_booth. Call it with the jobId that returned, or with no arguments for the most recent job on this connection of any kind. " +
+        "Report on background work started by start_frame, refine_frame, start_booth, refine_booth or create_booth. Always pass the jobId that the start/refine/create call returned — keep it for the rest of the conversation, because an id keeps working for the full 15 minutes even if the connection re-authenticates partway through, and calling with no arguments does not. With no arguments it reports the most recent job of any kind, which is a convenience for when the id was lost, not the normal way to call it. " +
         "Designing a booth takes 1-3 minutes, a redraw about a minute, creating a booth 2-6 minutes: tell the operator that, then poll about every 15 seconds. " +
         "While it says 'running', nothing exists yet — relay the progress line if there is one, tell the operator it is still going, and wait 10-15 seconds before calling again rather than polling tightly. " +
         "When it says 'done': a frame job carries imageUrl, threadId and generationId (a preview — nothing saved until save_frame); a booth design carries draft{…} (a draft — nothing created until create_booth); a booth creation carries booth{slug, boothUrl, projectId} — the one case where something now exists. " +
@@ -146,16 +146,23 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
           .string()
           .optional()
           .describe(
-            "The id a start/refine/create tool returned. Omit to report on the most recent job on this connection."
+            "The id a start/refine/create tool returned. Pass it whenever you have it. Omit only if it was lost, which falls back to the most recent job listed for this connection."
           ),
       },
       outputSchema: checkGenerationOutput,
     },
     handler: async (args: { jobId?: string }): Promise<CheckGenerationResult> => {
+      /**
+       * Resolved first, and for its side effect as much as its value: it
+       * throws when no account is connected, so an uncredentialled caller is
+       * refused here rather than being handed somebody's job. `byId` does not
+       * consult it — a job is owned by whoever can name it — but `list` does,
+       * because "the most recent one" has no id to go on.
+       */
       const ownerKey = studio.ownerKey();
 
       const job: Job<unknown> | null | undefined = args.jobId
-        ? jobs.get<unknown>(ownerKey, args.jobId)
+        ? jobs.byId<unknown>(args.jobId)
         : jobs.list<unknown>(ownerKey)[0];
 
       if (!job) {
@@ -164,9 +171,16 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
           state: "unknown",
           what: "",
           error: args.jobId
-            ? "No job with that id is being tracked. It may have finished before a restart, or belonged to a different connection. " +
+            ? "No job with that id is being tracked — it has either finished and been swept, or was lost to a restart. " +
               "A threadId still works with refine_frame and save_frame; a draftId still works with refine_booth and create_booth; a booth that was being created may have finished — list_projects or the dashboard will show it."
-            : "No background work has been started on this connection.",
+            : // Not "nothing was started": a job id outlives the credential it
+              // was issued under, but this listing does not, so after the
+              // connection re-authenticates the work is still running and
+              // still readable — just no longer listed. Saying "nothing" here
+              // would send the model off to start a second one.
+              "No background work is listed for this connection. If something was started earlier in this conversation, " +
+              "call this again with its jobId — an id keeps working even after the connection re-authenticates. " +
+              "Otherwise nothing has been started yet.",
           dashboardUrl: `${config.apiUrl}/dashboard`,
         };
       }

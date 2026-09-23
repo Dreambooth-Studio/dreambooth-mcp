@@ -233,9 +233,9 @@ const EDITS_DRAFT = {
  * `digital_mode` ships — and the booth flow should be run end to end against
  * production first, which has never been done.
  *
- * Note what this is NOT: it does not vary per connection. Every caller sees
- * the same inventory, which is the property the note above the write tools
- * exists to protect. A compile-time constant keeps that true.
+ * Note what this is NOT: it does not vary per connection, so it does not
+ * reintroduce what the note above the write tools exists to prevent. Every
+ * caller is shown the same inventory; a compile-time constant keeps that true.
  */
 export const BOOTH_TOOLS_LIVE = false;
 
@@ -396,232 +396,254 @@ export function createServer(
   );
 
   /**
-   * The write tools exist only on the OAuth path.
+   * The write tools, registered unconditionally: the same list, in the same
+   * order, on every connection.
    *
-   * Not a policy bolted on afterwards — it is the same rule the Studio
-   * enforces, applied one layer earlier. Writing requires an access token that
-   * expires in an hour, carries `booths:write`, and can be revoked. The device
-   * flow's token is none of those: one year, no scope, no revocation. So on
-   * stdio and on a device-flow HTTP session these tools are not registered,
-   * and a model connected that way cannot promise something that would fail.
+   * They used to exist only where a bearer did, on the reasoning that writing
+   * needs a token that expires in an hour, carries `booths:write` and can be
+   * revoked, and that the device flow's one-year unscoped token is none of
+   * those. The rule is right. Enforcing it HERE was not, because `bearerAuth`
+   * was the mere PRESENCE of an `Authorization` header: `tools/list` answered
+   * 10 tools with no header and 22 with any string as one, and `resources/list`
+   * answered 1 widget or 3.
    *
-   * What this gate does NOT check is the scope, because it cannot: the token is
-   * a next-auth JWE and this server has no key for it. A read-scoped connection
-   * therefore still SEES the tools and gets a 403 on calling one, with a
-   * sentence naming the fix. Registering them per-scope would mean asking the
-   * Studio on every tools/list — a round trip in front of the cheapest call a
-   * client makes — to prevent a case that already fails cleanly.
+   * An inventory that depends on who is asking is not an inventory. The
+   * ChatGPT submission portal scans tools from the browser with no credential
+   * (see the CORS note in src/http.ts), so it could only ever see the read
+   * half while the submission declared all 22 — and any client that caches a
+   * list captured before sign-in goes on offering ten tools to an operator who
+   * has since connected an account.
+   *
+   * Removing the gate loosens nothing, because it never decided anything a
+   * later layer did not decide again, with a better answer:
+   *
+   *   no credential      every one of these is in `AUTH_REQUIRED_TOOLS`, so
+   *                      the transport answers 401 with the
+   *                      `WWW-Authenticate` challenge that STARTS the OAuth
+   *                      flow. The gate's answer was "unknown tool", which
+   *                      starts nothing and explains nothing.
+   *   device-flow token  the Studio refuses it, 403: "This token cannot create
+   *                      things. Connect the app through Dreambooth's sign-in
+   *                      instead."
+   *   read-scoped token  the Studio refuses it, 403: "This connection is
+   *                      read-only. Reconnect the app and approve permission
+   *                      to create things."
+   *
+   * The last two were ALREADY what an OAuth connection the gate let through
+   * would get, which is the whole argument: the scope decides, only the Studio
+   * can read it out of a next-auth JWE this server holds no key for, and both
+   * of its refusals are sentences an operator can act on. Answering a coarser
+   * version of that question one layer early bought nothing and cost a stable
+   * tool list. See docs/write-tools-plan.md §5.6.
    */
-  if (session.bearerAuth) {
-    registerWidget(server, {
-      uri: WRITE_RESULT_WIDGET_URI,
-      name: "write-result-card",
-      title: "What was created",
-      html: writeResultWidgetHtml,
-      description:
-        "A card confirming the duplicated booth — its name and what it was copied from — and a link to it in the dashboard.",
-    });
+  registerWidget(server, {
+    uri: WRITE_RESULT_WIDGET_URI,
+    name: "write-result-card",
+    title: "What was created",
+    html: writeResultWidgetHtml,
+    description:
+      "A card confirming the duplicated booth — its name and what it was copied from — and a link to it in the dashboard.",
+  });
+
+  /**
+   * The card everything GENERATED renders into — frames, booths, filters
+   * and their previews — from the moment it is asked for to the moment it
+   * exists. A start/refine/create handle renders as a live skeleton that
+   * polls `check_generation` itself and redraws as the preview; the done
+   * states show the thing. The one card that loads an image, so the one
+   * card whose CSP names an origin. See GENERATION_IMAGE_ORIGINS for why these.
+   */
+  registerWidget(server, {
+    uri: GENERATION_WIDGET_URI,
+    name: "generation-preview-card",
+    title: "Preview",
+    html: generationWidgetHtml,
+    description:
+      "A card showing the thing being made and, when it is done, the thing itself: a frame preview, a booth draft, a created booth, a saved frame, a created filter, or a filter preview. While work runs it shows a skeleton and updates itself. A preview is not a saved thing.",
+    csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
+  });
+
+  const createFilter = buildCreateFilter(studio, config);
+  server.registerTool(
+    createFilter.name,
+    withWidget(
+      { ...createFilter.config, annotations: CREATES },
+      GENERATION_WIDGET_URI,
+      {
+        invoking: "Membuat filter…",
+        invoked: "Filter dibuat",
+      },
+    ),
+    safe(createFilter.handler),
+  );
+
+  const duplicateProject = buildDuplicateProject(studio, config);
+  server.registerTool(
+    duplicateProject.name,
+    withWidget(
+      { ...duplicateProject.config, annotations: CREATES },
+      WRITE_RESULT_WIDGET_URI,
+      {
+        invoking: "Menduplikat booth…",
+        invoked: "Booth diduplikat",
+      },
+    ),
+    safe(duplicateProject.handler),
+  );
+
+  /**
+   * Frame generation is four tools, because it cannot answer in one call and
+   * because one answer is rarely the last. An image-model round trip runs
+   * 30–90 s against a 15 s request timeout, so `start_frame` and
+   * `refine_frame` start work and return a handle, and `check_generation`
+   * reports on it. And a first prompt rarely lands, so the shape is the
+   * dashboard's Frame Studio thread: start, look, refine in the same thread,
+   * and only `save_frame` puts a frame in the operator's list.
+   *
+   * Every one of them renders the generation card. A start or refine returns
+   * while nothing exists yet, so its card is a LIVE one: a skeleton of the
+   * thing being made that polls `check_generation` itself and redraws as the
+   * preview when the work is done — the operator watches it appear, nobody
+   * has to ask. `check_generation` is widget-accessible for exactly that;
+   * `save_frame` shows the saved frame's thumbnail.
+   *
+   * Listed unconditionally, like every other tool here. There used to be a
+   * flag, from when these wrapped an Imagen route that could never succeed;
+   * a switch whose only job is "hide a tool that cannot work" is not worth
+   * an environment variable once the tool can. What remains is deploy
+   * order — the Studio routes these call must be live first — and that is
+   * a note in the README, not a runtime setting.
+   */
+  const startFrame = buildStartFrame(studio);
+  server.registerTool(
+    startFrame.name,
+    withWidget(
+      { ...startFrame.config, annotations: CREATES },
+      GENERATION_WIDGET_URI,
+      { invoking: "Memulai frame…", invoked: "Sedang membuat frame" },
+    ),
+    safe(startFrame.handler),
+  );
+
+  const refineFrame = buildRefineFrame(studio);
+  server.registerTool(
+    refineFrame.name,
+    withWidget(
+      { ...refineFrame.config, annotations: CREATES },
+      GENERATION_WIDGET_URI,
+      { invoking: "Mengubah frame…", invoked: "Sedang mengubah frame" },
+    ),
+    safe(refineFrame.handler),
+  );
+
+  const checkGeneration = buildCheckGeneration(studio, config);
+  server.registerTool(
+    checkGeneration.name,
+    // Reads a status and creates nothing. Saying so is what lets a client
+    // poll without asking the operator each time, which is the only way
+    // polling is tolerable — and widget-accessible, so the live card can
+    // poll it from inside the iframe as well.
+    widgetAccessible(
+      withWidget(
+        { ...checkGeneration.config, annotations: READ_ONLY_LOCAL },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengecek…", invoked: "Pratinjau" },
+      ),
+    ),
+    safe(checkGeneration.handler),
+  );
+
+  const saveFrame = buildSaveFrame(studio, config);
+  server.registerTool(
+    saveFrame.name,
+    withWidget(
+      { ...saveFrame.config, annotations: CREATES },
+      GENERATION_WIDGET_URI,
+      { invoking: "Menyimpan frame…", invoked: "Frame disimpan" },
+    ),
+    safe(saveFrame.handler),
+  );
+  /**
+   * `preview_filter` is the read-only half of filter design: it renders,
+   * `create_filter` saves. It stays whatever the booth tools are doing —
+   * `/api/filters/preview` carries no feature flag and answers today.
+   */
+  const previewFilter = buildPreviewFilter(studio);
+  server.registerTool(
+    previewFilter.name,
+    withWidget(
+      // Renders a sample photo and returns a URL; creates nothing the
+      // operator can see. Read-only is what lets the model preview freely
+      // while the operator decides.
+      { ...previewFilter.config, annotations: READ_ONLY },
+      GENERATION_WIDGET_URI,
+      { invoking: "Merender pratinjau filter…", invoked: "Pratinjau filter" },
+    ),
+    safe(previewFilter.handler),
+  );
+
+  // See BOOTH_TOOLS_LIVE: these five are 404 on the Studio until
+  // `digital_mode` is live, so they are not advertised.
+  if (BOOTH_TOOLS_LIVE) {
+    const startBooth = buildStartBooth(studio);
+    server.registerTool(
+      startBooth.name,
+      withWidget(
+        { ...startBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Merancang booth…", invoked: "Sedang merancang booth" },
+      ),
+      safe(startBooth.handler),
+    );
+
+    const refineBooth = buildRefineBooth(studio);
+    server.registerTool(
+      refineBooth.name,
+      withWidget(
+        { ...refineBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Mengubah rancangan…", invoked: "Sedang mengubah rancangan" },
+      ),
+      safe(refineBooth.handler),
+    );
+
+    const createBooth = buildCreateBooth(studio, config);
+    server.registerTool(
+      createBooth.name,
+      withWidget(
+        { ...createBooth.config, annotations: CREATES },
+        GENERATION_WIDGET_URI,
+        { invoking: "Membuat booth…", invoked: "Sedang membuat booth" },
+      ),
+      safe(createBooth.handler),
+    );
 
     /**
-     * The card everything GENERATED renders into — frames, booths, filters
-     * and their previews — from the moment it is asked for to the moment it
-     * exists. A start/refine/create handle renders as a live skeleton that
-     * polls `check_generation` itself and redraws as the preview; the done
-     * states show the thing. The one card that loads an image, so the one
-     * card whose CSP names an origin. See GENERATION_IMAGE_ORIGINS for why these.
+     * The other two levers on a draft: read it back (the job store forgets,
+     * the Studio does not) and change what a redraw cannot — settings, text,
+     * colours, frames, filters, effect — before create_booth applies them.
      */
-    registerWidget(server, {
-      uri: GENERATION_WIDGET_URI,
-      name: "generation-preview-card",
-      title: "Preview",
-      html: generationWidgetHtml,
-      description:
-        "A card showing the thing being made and, when it is done, the thing itself: a frame preview, a booth draft, a created booth, a saved frame, a created filter, or a filter preview. While work runs it shows a skeleton and updates itself. A preview is not a saved thing.",
-      csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
-    });
-
-    const createFilter = buildCreateFilter(studio, config);
+    const getBoothDraft = buildGetBoothDraft(studio);
     server.registerTool(
-      createFilter.name,
+      getBoothDraft.name,
       withWidget(
-        { ...createFilter.config, annotations: CREATES },
+        { ...getBoothDraft.config, annotations: READ_ONLY },
         GENERATION_WIDGET_URI,
-        {
-          invoking: "Membuat filter…",
-          invoked: "Filter dibuat",
-        },
+        { invoking: "Membaca rancangan…", invoked: "Rancangan booth" },
       ),
-      safe(createFilter.handler),
+      safe(getBoothDraft.handler),
     );
 
-    const duplicateProject = buildDuplicateProject(studio, config);
+    const updateBoothDraft = buildUpdateBoothDraft(studio);
     server.registerTool(
-      duplicateProject.name,
+      updateBoothDraft.name,
       withWidget(
-        { ...duplicateProject.config, annotations: CREATES },
-        WRITE_RESULT_WIDGET_URI,
-        {
-          invoking: "Menduplikat booth…",
-          invoked: "Booth diduplikat",
-        },
-      ),
-      safe(duplicateProject.handler),
-    );
-
-    /**
-     * Frame generation is four tools, because it cannot answer in one call and
-     * because one answer is rarely the last. An image-model round trip runs
-     * 30–90 s against a 15 s request timeout, so `start_frame` and
-     * `refine_frame` start work and return a handle, and `check_generation`
-     * reports on it. And a first prompt rarely lands, so the shape is the
-     * dashboard's Frame Studio thread: start, look, refine in the same thread,
-     * and only `save_frame` puts a frame in the operator's list.
-     *
-     * Every one of them renders the generation card. A start or refine returns
-     * while nothing exists yet, so its card is a LIVE one: a skeleton of the
-     * thing being made that polls `check_generation` itself and redraws as the
-     * preview when the work is done — the operator watches it appear, nobody
-     * has to ask. `check_generation` is widget-accessible for exactly that;
-     * `save_frame` shows the saved frame's thumbnail.
-     *
-     * Listed unconditionally, like every other tool here. There used to be a
-     * flag, from when these wrapped an Imagen route that could never succeed;
-     * a switch whose only job is "hide a tool that cannot work" is not worth
-     * an environment variable once the tool can. What remains is deploy
-     * order — the Studio routes these call must be live first — and that is
-     * a note in the README, not a runtime setting.
-     */
-    const startFrame = buildStartFrame(studio);
-    server.registerTool(
-      startFrame.name,
-      withWidget(
-        { ...startFrame.config, annotations: CREATES },
+        { ...updateBoothDraft.config, annotations: EDITS_DRAFT },
         GENERATION_WIDGET_URI,
-        { invoking: "Memulai frame…", invoked: "Sedang membuat frame" },
+        { invoking: "Mengubah rancangan…", invoked: "Rancangan diperbarui" },
       ),
-      safe(startFrame.handler),
+      safe(updateBoothDraft.handler),
     );
-
-    const refineFrame = buildRefineFrame(studio);
-    server.registerTool(
-      refineFrame.name,
-      withWidget(
-        { ...refineFrame.config, annotations: CREATES },
-        GENERATION_WIDGET_URI,
-        { invoking: "Mengubah frame…", invoked: "Sedang mengubah frame" },
-      ),
-      safe(refineFrame.handler),
-    );
-
-    const checkGeneration = buildCheckGeneration(studio, config);
-    server.registerTool(
-      checkGeneration.name,
-      // Reads a status and creates nothing. Saying so is what lets a client
-      // poll without asking the operator each time, which is the only way
-      // polling is tolerable — and widget-accessible, so the live card can
-      // poll it from inside the iframe as well.
-      widgetAccessible(
-        withWidget(
-          { ...checkGeneration.config, annotations: READ_ONLY_LOCAL },
-          GENERATION_WIDGET_URI,
-          { invoking: "Mengecek…", invoked: "Pratinjau" },
-        ),
-      ),
-      safe(checkGeneration.handler),
-    );
-
-    const saveFrame = buildSaveFrame(studio, config);
-    server.registerTool(
-      saveFrame.name,
-      withWidget(
-        { ...saveFrame.config, annotations: CREATES },
-        GENERATION_WIDGET_URI,
-        { invoking: "Menyimpan frame…", invoked: "Frame disimpan" },
-      ),
-      safe(saveFrame.handler),
-    );
-    /**
-     * `preview_filter` is the read-only half of filter design: it renders,
-     * `create_filter` saves. It stays whatever the booth tools are doing —
-     * `/api/filters/preview` carries no feature flag and answers today.
-     */
-    const previewFilter = buildPreviewFilter(studio);
-    server.registerTool(
-      previewFilter.name,
-      withWidget(
-        // Renders a sample photo and returns a URL; creates nothing the
-        // operator can see. Read-only is what lets the model preview freely
-        // while the operator decides.
-        { ...previewFilter.config, annotations: READ_ONLY },
-        GENERATION_WIDGET_URI,
-        { invoking: "Merender pratinjau filter…", invoked: "Pratinjau filter" },
-      ),
-      safe(previewFilter.handler),
-    );
-
-    // See BOOTH_TOOLS_LIVE: these five are 404 on the Studio until
-    // `digital_mode` is live, so they are not advertised.
-    if (BOOTH_TOOLS_LIVE) {
-      const startBooth = buildStartBooth(studio);
-      server.registerTool(
-        startBooth.name,
-        withWidget(
-          { ...startBooth.config, annotations: CREATES },
-          GENERATION_WIDGET_URI,
-          { invoking: "Merancang booth…", invoked: "Sedang merancang booth" },
-        ),
-        safe(startBooth.handler),
-      );
-
-      const refineBooth = buildRefineBooth(studio);
-      server.registerTool(
-        refineBooth.name,
-        withWidget(
-          { ...refineBooth.config, annotations: CREATES },
-          GENERATION_WIDGET_URI,
-          { invoking: "Mengubah rancangan…", invoked: "Sedang mengubah rancangan" },
-        ),
-        safe(refineBooth.handler),
-      );
-
-      const createBooth = buildCreateBooth(studio, config);
-      server.registerTool(
-        createBooth.name,
-        withWidget(
-          { ...createBooth.config, annotations: CREATES },
-          GENERATION_WIDGET_URI,
-          { invoking: "Membuat booth…", invoked: "Sedang membuat booth" },
-        ),
-        safe(createBooth.handler),
-      );
-
-      /**
-       * The other two levers on a draft: read it back (the job store forgets,
-       * the Studio does not) and change what a redraw cannot — settings, text,
-       * colours, frames, filters, effect — before create_booth applies them.
-       */
-      const getBoothDraft = buildGetBoothDraft(studio);
-      server.registerTool(
-        getBoothDraft.name,
-        withWidget(
-          { ...getBoothDraft.config, annotations: READ_ONLY },
-          GENERATION_WIDGET_URI,
-          { invoking: "Membaca rancangan…", invoked: "Rancangan booth" },
-        ),
-        safe(getBoothDraft.handler),
-      );
-
-      const updateBoothDraft = buildUpdateBoothDraft(studio);
-      server.registerTool(
-        updateBoothDraft.name,
-        withWidget(
-          { ...updateBoothDraft.config, annotations: EDITS_DRAFT },
-          GENERATION_WIDGET_URI,
-          { invoking: "Mengubah rancangan…", invoked: "Rancangan diperbarui" },
-        ),
-        safe(updateBoothDraft.handler),
-      );
-    }
   }
 
   return server;

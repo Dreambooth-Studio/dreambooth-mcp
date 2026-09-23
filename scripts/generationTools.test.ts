@@ -94,14 +94,13 @@ const drained = async () => {
   for (let i = 0; i < 10; i++) await settled();
 };
 
-/* ------------------------------------------------------------- the gate --- */
+/* -------------------------------------------------------- the inventory --- */
 
-async function toolNames(bearerAuth: boolean, config: Config = CONFIG): Promise<string[]> {
+async function toolNames(config: Config = CONFIG): Promise<string[]> {
   const server = createServer(config, new SessionTokens(), {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth,
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -112,21 +111,21 @@ async function toolNames(bearerAuth: boolean, config: Config = CONFIG): Promise<
   return listed.tools.map((t) => t.name);
 }
 
-test("the frame tools live on the OAuth path only", async () => {
-  const withBearer = await toolNames(true);
-  for (const name of FRAME_TOOLS) assert.ok(withBearer.includes(name), name);
-
-  // A device-flow token is a year long, unscoped and unrevocable. Generating
-  // spends the operator's daily allowance, so it belongs behind the credential
-  // that expires and can be revoked, like every other write here.
-  const anonymous = await toolNames(false);
-  for (const name of FRAME_TOOLS) assert.ok(!anonymous.includes(name), name);
+test("the frame tools are listed with no credential present", async () => {
+  // A device-flow token is a year long, unscoped and unrevocable, and
+  // generating spends the operator's daily allowance — so it must not be able
+  // to generate. That is still true; the Studio is what enforces it, with a
+  // 403 naming the fix. Hiding the tools enforced a coarser version of the
+  // same rule and made the tool list depend on an HTTP header.
+  const listed = await toolNames();
+  for (const name of FRAME_TOOLS) assert.ok(listed.includes(name), name);
 });
 
 test("all four are listed as needing auth, so a call without one starts a sign-in", () => {
-  // They are registered only when a bearer is present, so without this a call
-  // would come back "unknown tool" — which tells the client nothing and starts
-  // no OAuth flow.
+  // The tools are advertised to everyone, so this list is the only thing
+  // standing between an uncredentialled call and the Studio. Without it the
+  // call would reach the Studio tokenless and come back "not connected", which
+  // reads as a failure and starts no OAuth flow.
   for (const name of FRAME_TOOLS) {
     assert.ok(AUTH_REQUIRED_TOOLS.has(name), name);
     const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
@@ -139,7 +138,6 @@ test("start, refine and save create; check_generation does not", async () => {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -176,7 +174,6 @@ test("start, refine and save create; check_generation does not", async () => {
       transport: "http",
       sessionId: () => undefined,
       stateless: true,
-      bearerAuth: true,
     });
     const [c2, s2] = InMemoryTransport.createLinkedPair();
     const cl = new Client({ name: "test", version: "0" });
@@ -570,7 +567,6 @@ test("every frame-tool result satisfies the published output schema", async () =
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -646,4 +642,67 @@ test("every frame-tool result satisfies the published output schema", async () =
     await client.close();
     await server.close();
   }
+});
+
+/* ------------------------------------------- across a credential change --- */
+
+/**
+ * The failure this replaced: ownership was `sha256(access token)`, so a job
+ * stopped being readable the moment the token moved — and it moves routinely.
+ * The authorization server advertises `refresh_token` and access tokens last an
+ * hour, so ChatGPT refreshes mid-conversation; the same operator's phone and
+ * laptop hold different tokens for the same account. A booth creation runs 2-6
+ * minutes with the card polling throughout, and `check_generation` would report
+ * "no job with that id is being tracked" about work that was running fine.
+ */
+test("a jobId outlives the access token it was issued under", async () => {
+  let token = randomUUID();
+  const studio = {
+    ownerKey: () => ownerKeyFor(token),
+    post: async (path: string) =>
+      path === "/api/ai/frames/start" ? THREAD : generated("g1"),
+  } as unknown as StudioClient;
+
+  const started = await buildStartFrame(studio).handler({
+    prompt: "batik motifs in warm gold",
+    layout: "strip-3",
+  });
+  await drained();
+
+  // The refresh. Same operator, same conversation, different bearer.
+  token = randomUUID();
+
+  const done = await buildCheckGeneration(studio, CONFIG).handler({
+    jobId: started.jobId,
+  });
+  assert.equal(done.state, "done", "the id still resolves after the refresh");
+  assert.equal(done.generationId, "g1");
+  assert.equal(done.imageUrl, IMAGE);
+});
+
+test("with no jobId the listing goes quiet, and does not claim nothing was started", async () => {
+  // The half that could NOT be fixed this way: "the most recent job" has no id
+  // to go on, so it is still keyed to the credential and still goes empty after
+  // a refresh. What matters is that it does not answer "nothing has been
+  // started" — that would send the model off to start a second generation and
+  // spend another slice of the operator's daily allowance.
+  let token = randomUUID();
+  const studio = {
+    ownerKey: () => ownerKeyFor(token),
+    post: async (path: string) =>
+      path === "/api/ai/frames/start" ? THREAD : generated("g1"),
+  } as unknown as StudioClient;
+
+  await buildStartFrame(studio).handler({
+    prompt: "batik motifs in warm gold",
+    layout: "strip-3",
+  });
+  await drained();
+
+  token = randomUUID();
+  const answer = await buildCheckGeneration(studio, CONFIG).handler({});
+
+  assert.equal(answer.state, "unknown");
+  assert.match(String(answer.error), /call this again with its jobId/);
+  assert.doesNotMatch(String(answer.error), /^No background work has been started/);
 });

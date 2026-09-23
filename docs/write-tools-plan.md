@@ -261,6 +261,20 @@ koneksi read-only tetap **melihat** tool-nya, dan baru tahu waktu memanggil.
 Itu gagal dengan bersih, kalimatnya menyebut cara memperbaikinya, dan
 harganya nol round trip. Baris di §10 sudah disesuaikan.
 
+**Pembaruan 2026-09-23: baris pertama tabel itu juga dihapus.** `bearerAuth`
+cuma memeriksa **ADA**-nya header `Authorization`, bukan isinya — jadi
+`tools/list` menjawab 10 tool tanpa header dan 22 dengan string apa pun sebagai
+bearer, dan `resources/list` menjawab 1 widget atau 3. Daftar tool yang berubah
+tergantung siapa yang bertanya bukan daftar: pemindai tool portal ChatGPT jalan
+di browser tanpa kredensial, jadi ia cuma pernah melihat separuh yang read
+sementara submission mendeklarasikan 22 — dan klien mana pun yang menyimpan
+daftar dari sebelum sign-in terus menawarkan sepuluh tool ke operator yang
+sudah menyambungkan akun. Sekarang semua tool terdaftar di setiap koneksi;
+`AUTH_REQUIRED_TOOLS` mengubah panggilan tanpa kredensial jadi 401 yang
+**memulai** alur OAuth (dulu jawabannya "unknown tool", yang tidak memulai
+apa-apa), dan Studio tetap menjawab 403 untuk token tanpa `booths:write`.
+Barisnya jadi satu: yang memeriksa scope cuma Studio.
+
 ### 5.7 Yang berubah saat ditinjau: duplikat itu **aktif**, dan slug-nya dibuang
 
 Dokumen ini, deskripsi tool, README dan uji kasus 7 di `chatgpt-listing.md`

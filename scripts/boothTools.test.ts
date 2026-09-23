@@ -115,14 +115,13 @@ const drained = async () => {
   for (let i = 0; i < 12; i++) await settled();
 };
 
-/* ------------------------------------------------------------- the gate --- */
+/* -------------------------------------------------------- the inventory --- */
 
-async function toolNames(bearerAuth: boolean): Promise<string[]> {
+async function toolNames(): Promise<string[]> {
   const server = createServer(CONFIG, new SessionTokens(), {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -134,27 +133,30 @@ async function toolNames(bearerAuth: boolean): Promise<string[]> {
 }
 
 test("the booth tools are registered only when the Studio can serve them", async () => {
-  // Everything they call is gated on the Studio's `digital_mode` flag, which
-  // is off, so those routes 404 for everyone. Advertising five tools that
-  // cannot work is a promise the product cannot keep — see BOOTH_TOOLS_LIVE.
-  // Asserting against the constant rather than against `false` means flipping
-  // it flips this test with it, instead of leaving a stale expectation behind.
-  const withBearer = await toolNames(true);
+  // Two separate rules, and they are easy to confuse. The credential never
+  // decides what is advertised — that is what `toolNames()` taking no argument
+  // now means, and preview_filter below holds the line on it. What DOES decide
+  // is whether the Studio can serve the tool at all: everything the booth
+  // tools call is gated on `digital_mode`, which is off, so those routes 404
+  // for everyone. See BOOTH_TOOLS_LIVE.
+  //
+  // Asserted against the constant rather than against `false`, so flipping it
+  // flips this test with it instead of leaving a stale expectation behind.
+  const listed = await toolNames();
   for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS]) {
-    assert.equal(withBearer.includes(name), BOOTH_TOOLS_LIVE, name);
+    assert.equal(listed.includes(name), BOOTH_TOOLS_LIVE, name);
   }
-  // preview_filter is not a booth tool. /api/filters/preview carries no flag
-  // and answers today, so it is unaffected either way.
-  assert.ok(withBearer.includes("preview_filter"));
-  const anonymous = await toolNames(false);
-  assert.ok(!anonymous.includes("preview_filter"));
+  // preview_filter is not a booth tool. `/api/filters/preview` carries no flag
+  // and answers today, so it is listed either way — and listed on a connection
+  // carrying no credential at all, which is the property #37 established.
+  assert.ok(listed.includes("preview_filter"));
 });
 
 test("the auth list tracks the registration, so nothing 401s for a tool that is not there", () => {
-  // The invariant this exists for: a name in AUTH_REQUIRED_TOOLS that
-  // createServer never registers turns a call into a 401 that starts a sign-in
-  // for a tool that does not exist. The operator approves an account and the
-  // retry still answers "unknown tool". The two lists move together.
+  // The invariant: a name in AUTH_REQUIRED_TOOLS that createServer does not
+  // register turns a call into a 401 that starts a sign-in for a tool that
+  // does not exist. The operator approves an account and the retry still
+  // answers "unknown tool". The two lists move together.
   for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS]) {
     assert.equal(AUTH_REQUIRED_TOOLS.has(name), BOOTH_TOOLS_LIVE, name);
     const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
@@ -172,7 +174,6 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -195,9 +196,9 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     assert.equal(meta(name)["openai/outputTemplate"], "ui://widget/generation.html", name);
   }
 
-  // The booth half of this only means anything while the booth tools are
-  // registered. Kept in one piece rather than deleted: it is the assertion
-  // that has to pass again on the day BOOTH_TOOLS_LIVE flips.
+  // The booth half only means anything while the booth tools are registered.
+  // Kept in one piece rather than deleted: it is the assertion that has to
+  // pass again on the day BOOTH_TOOLS_LIVE flips.
   if (!BOOTH_TOOLS_LIVE) return;
 
   for (const name of BOOTH_TOOLS) {
@@ -699,7 +700,6 @@ test("every booth and filter-preview result satisfies the published output schem
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
