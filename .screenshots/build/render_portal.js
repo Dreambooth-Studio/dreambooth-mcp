@@ -29,16 +29,25 @@ const SCALE = 2;
 const PAD = 6;       // breathing room so the card never touches the edge
 
 /**
- * Four cards, one per thing the app can make. The loading skeletons and the
- * dark variants are deliberately not here: the guidelines ask for screenshots
- * that represent the functionality, and a spinner over an empty placeholder
- * represents the waiting, not the feature. Four is also the portal's cap.
+ * One card per thing the app can make, which as of 2026-09-23 is two.
+ *
+ * The loading skeletons and the dark variants are deliberately not here: the
+ * guidelines ask for screenshots that represent the functionality, and a
+ * spinner over an empty placeholder represents the waiting, not the feature.
+ *
+ * The booth cards are commented out rather than deleted. `BOOTH_TOOLS_LIVE` in
+ * src/mcp/server.ts is false while the Studio's `digital_mode` flag is off, so
+ * `start_booth` is not registered and a card showing a booth draft is a picture
+ * of a feature a reviewer cannot reach - the one thing the guidelines are
+ * explicit about. Uncomment both when the flag ships, renumber, and re-run the
+ * capture: `04-booth-created` has never been built at all, because no capture
+ * run has ever got as far as `create_booth`.
  */
 const PICKS = [
-  ["01-booth-draft", "booth-draft-light"],
-  ["02-frame-preview", "frame-preview-light"],
-  ["03-filter-preview", "filter-preview-light"],
-  ["04-booth-created", "booth-created-light"],
+  // ["01-booth-draft", "booth-draft-light"],
+  ["01-frame-preview", "frame-preview-light"],
+  ["02-filter-preview", "filter-preview-light"],
+  // ["04-booth-created", "booth-created-light"],
 ];
 
 const ROUTES = {
