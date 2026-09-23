@@ -643,3 +643,66 @@ test("every frame-tool result satisfies the published output schema", async () =
     await server.close();
   }
 });
+
+/* ------------------------------------------- across a credential change --- */
+
+/**
+ * The failure this replaced: ownership was `sha256(access token)`, so a job
+ * stopped being readable the moment the token moved — and it moves routinely.
+ * The authorization server advertises `refresh_token` and access tokens last an
+ * hour, so ChatGPT refreshes mid-conversation; the same operator's phone and
+ * laptop hold different tokens for the same account. A booth creation runs 2-6
+ * minutes with the card polling throughout, and `check_generation` would report
+ * "no job with that id is being tracked" about work that was running fine.
+ */
+test("a jobId outlives the access token it was issued under", async () => {
+  let token = randomUUID();
+  const studio = {
+    ownerKey: () => ownerKeyFor(token),
+    post: async (path: string) =>
+      path === "/api/ai/frames/start" ? THREAD : generated("g1"),
+  } as unknown as StudioClient;
+
+  const started = await buildStartFrame(studio).handler({
+    prompt: "batik motifs in warm gold",
+    layout: "strip-3",
+  });
+  await drained();
+
+  // The refresh. Same operator, same conversation, different bearer.
+  token = randomUUID();
+
+  const done = await buildCheckGeneration(studio, CONFIG).handler({
+    jobId: started.jobId,
+  });
+  assert.equal(done.state, "done", "the id still resolves after the refresh");
+  assert.equal(done.generationId, "g1");
+  assert.equal(done.imageUrl, IMAGE);
+});
+
+test("with no jobId the listing goes quiet, and does not claim nothing was started", async () => {
+  // The half that could NOT be fixed this way: "the most recent job" has no id
+  // to go on, so it is still keyed to the credential and still goes empty after
+  // a refresh. What matters is that it does not answer "nothing has been
+  // started" — that would send the model off to start a second generation and
+  // spend another slice of the operator's daily allowance.
+  let token = randomUUID();
+  const studio = {
+    ownerKey: () => ownerKeyFor(token),
+    post: async (path: string) =>
+      path === "/api/ai/frames/start" ? THREAD : generated("g1"),
+  } as unknown as StudioClient;
+
+  await buildStartFrame(studio).handler({
+    prompt: "batik motifs in warm gold",
+    layout: "strip-3",
+  });
+  await drained();
+
+  token = randomUUID();
+  const answer = await buildCheckGeneration(studio, CONFIG).handler({});
+
+  assert.equal(answer.state, "unknown");
+  assert.match(String(answer.error), /call this again with its jobId/);
+  assert.doesNotMatch(String(answer.error), /^No background work has been started/);
+});

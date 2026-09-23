@@ -8,10 +8,13 @@ import { JobStore, JobLimitError, ownerKeyFor, type JobContext } from "../src/jo
  * tool call.
  *
  * Two properties here are security properties rather than conveniences: a job
- * is readable only by the credential that started it, and the credential
- * itself is never kept. The rest is about not lying to an operator who is
- * waiting — a job that hangs at "running" forever is worse than one that
- * failed, because the model keeps telling them it is nearly ready.
+ * cannot be ENUMERATED by anyone but the credential that started it, and the
+ * credential itself is never kept. Naming a job is a separate question from
+ * discovering one — an id is a 122-bit secret handed only to the caller that
+ * started the work, and it outlives the access token, which is the point. The
+ * rest is about not lying to an operator who is waiting: a job that hangs at
+ * "running" forever is worse than one that failed, because the model keeps
+ * telling them it is nearly ready.
  */
 
 const ALICE = ownerKeyFor("alice-token");
@@ -59,8 +62,8 @@ test("start returns immediately, long before the work finishes", async () => {
 
   work.resolve("a frame");
   await settled();
-  assert.equal(store.get(ALICE, job.id)?.state, "done");
-  assert.equal(store.get<string>(ALICE, job.id)?.result, "a frame");
+  assert.equal(store.byId(job.id)?.state, "done");
+  assert.equal(store.byId<string>(job.id)?.result, "a frame");
 });
 
 test("a failure is recorded, not thrown at nobody", async () => {
@@ -73,7 +76,7 @@ test("a failure is recorded, not thrown at nobody", async () => {
   work.reject(Object.assign(new Error("Today's free AI pool is used up."), { status: 403 }));
   await settled();
 
-  const done = store.get(ALICE, job.id);
+  const done = store.byId(job.id);
   assert.equal(done?.state, "failed");
   assert.equal(done?.error?.message, "Today's free AI pool is used up.");
   assert.equal(done?.error?.status, 403);
@@ -85,23 +88,40 @@ test("a non-Error rejection still produces a readable message", async () => {
   const job = store.start(ALICE, "x", () => work.promise);
   work.reject("just a string");
   await settled();
-  assert.equal(store.get(ALICE, job.id)?.error?.message, "just a string");
+  assert.equal(store.byId(job.id)?.error?.message, "just a string");
 });
 
 /* ------------------------------------------------------------ ownership --- */
 
-test("a job is invisible to any credential but the one that started it", async () => {
+test("a job is readable by whoever can name it, whatever credential they hold", async () => {
   const store = new JobStore();
   const job = store.start(ALICE, "generate a frame", async () => "done");
   await settled();
 
-  assert.ok(store.get(ALICE, job.id), "the owner can read it");
-  // Not a different error, not a 403 — the same answer as an id that never
-  // existed. Anything else confirms to a caller holding a guessed id that it
-  // named something real.
-  assert.equal(store.get(BOB, job.id), null);
-  assert.equal(store.get(BOB, "00000000-0000-0000-0000-000000000000"), null);
+  assert.ok(store.byId(job.id), "the owner can read it");
+  // The case this exists for: the token moved. ChatGPT refreshes an hour-old
+  // access token mid-conversation and the operator's phone holds a different
+  // one from their laptop — BOB here stands for both. Requiring the ownerKey
+  // to match made a running job unreadable at exactly those moments, which is
+  // what the id being unguessable now covers instead.
+  assert.ok(store.byId(job.id), "and so can the same person after a refresh");
+
+  // An id nobody was given is still nothing, and reads identically to one that
+  // never existed.
+  assert.equal(store.byId("00000000-0000-0000-0000-000000000000"), null);
+});
+
+test("nobody can enumerate a job they were not handed", async () => {
+  // The line that did not move: naming a job you were given is one thing,
+  // discovering one you were not is another. `list` is what answers with no id
+  // supplied, so it stays keyed to the credential.
+  const store = new JobStore();
+  const job = store.start(ALICE, "generate a frame", async () => "done");
+  await settled();
+
   assert.deepEqual(store.list(BOB), []);
+  assert.equal(store.list(ALICE).length, 1);
+  assert.equal(store.list<string>(ALICE)[0].id, job.id);
 });
 
 /**
@@ -130,7 +150,7 @@ test("nothing handed out carries the owner key", async () => {
   const started = store.start(ALICE, "x", async () => "y");
   await settled();
 
-  for (const view of [started, store.get(ALICE, started.id), ...store.list(ALICE)]) {
+  for (const view of [started, store.byId(started.id), ...store.list(ALICE)]) {
     assert.ok(view);
     assert.ok(!("ownerKey" in (view as object)), "ownerKey must not leave the module");
     assert.ok(!("seq" in (view as object)), "internal ordering is not part of the contract");
@@ -202,12 +222,12 @@ test("a job's own ceiling decides when the sweep presumes it dead", async () => 
     });
 
     now += 2_000;
-    assert.equal(store.get(ALICE, quick.id)?.state, "failed", "past its own ceiling");
-    assert.equal(store.get(ALICE, slow.id)?.state, "running", "well inside its own");
-    assert.match(String(store.get(ALICE, quick.id)?.error?.message), /generation stopped reporting/);
+    assert.equal(store.byId(quick.id)?.state, "failed", "past its own ceiling");
+    assert.equal(store.byId(slow.id)?.state, "running", "well inside its own");
+    assert.match(String(store.byId(quick.id)?.error?.message), /generation stopped reporting/);
 
     now += 9_000;
-    const sweptBooth = store.get(ALICE, slow.id);
+    const sweptBooth = store.byId(slow.id);
     assert.equal(sweptBooth?.state, "failed");
     // The sentence names what to check for a booth, not "the dashboard".
     assert.match(String(sweptBooth?.error?.message), /list_projects/);
@@ -229,16 +249,16 @@ test("running work can say where it is, and a finished job stops listening", asy
   assert.equal(seen.ctx.jobId, job.id);
 
   seen.ctx.progress("  drawing the welcome screen for phones  ");
-  assert.equal(store.get(ALICE, job.id)?.progress, "drawing the welcome screen for phones");
+  assert.equal(store.byId(job.id)?.progress, "drawing the welcome screen for phones");
   assert.equal(store.list(ALICE)[0]?.progress, "drawing the welcome screen for phones");
 
   // Capped, because a poll relays it and a card draws it.
   seen.ctx.progress("x".repeat(500));
-  assert.equal(store.get(ALICE, job.id)?.progress?.length, 140);
+  assert.equal(store.byId(job.id)?.progress?.length, 140);
 
   work.resolve("done");
   await settled();
-  const before = store.get(ALICE, job.id)?.progress;
+  const before = store.byId(job.id)?.progress;
   seen.ctx.progress("a late write from a background loop");
-  assert.equal(store.get(ALICE, job.id)?.progress, before, "ignored once finished");
+  assert.equal(store.byId(job.id)?.progress, before, "ignored once finished");
 });

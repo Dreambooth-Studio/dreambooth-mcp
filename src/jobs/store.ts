@@ -22,8 +22,10 @@ import { createHash, randomUUID } from "node:crypto";
  * scope survives to the poll. The device-flow `sessions` map is no help
  * either: it exists only for the path that has no bearer, which is exactly the
  * path the write tools are not registered on. So the store has to be the
- * process, and ownership has to be re-established from the credential on every
- * request rather than remembered.
+ * process, and ownership has to be re-established on every request rather than
+ * remembered. It is re-established from the JOB ID, not from the credential —
+ * see {@link JobStore.byId} for why the credential turned out to be the wrong
+ * thing to key on.
  *
  * ## What that costs, stated plainly
  *
@@ -137,14 +139,20 @@ interface StoredJob<T> extends Job<T> {
 /**
  * Identifies the holder of a credential without holding the credential.
  *
- * A job is readable only by the token that started it. Comparing tokens
- * directly would mean keeping operator credentials in a map for fifteen
- * minutes after the work finished, which is a strictly worse thing to own than
- * the job it protects. A hash answers the only question ever asked of it — is
- * this the same caller — and answers nothing else.
+ * Comparing tokens directly would mean keeping operator credentials in a map
+ * for fifteen minutes after the work finished, which is a strictly worse thing
+ * to own than the job it protects. A hash answers the only question ever asked
+ * of it — is this the same caller — and answers nothing else.
  *
  * Deliberately NOT the operator's email: this service cannot read one out of
  * the token. It is a next-auth JWE and we hold no key for it.
+ *
+ * What it identifies is a TOKEN, not a person, and the difference is the whole
+ * reason {@link JobStore.byId} no longer consults it: the same operator gets a
+ * new key on every refresh and a different one on every device. It is still
+ * the right key for {@link JobStore.list} and for {@link RecentCreations},
+ * which answer "what did I just do" and have no id to go on — see the note on
+ * `list` for what that costs.
  */
 export function ownerKeyFor(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -232,20 +240,60 @@ export class JobStore {
   }
 
   /**
-   * The job, if this caller is the one that started it.
+   * The job with this id, for any caller that can name it.
    *
-   * A job belonging to someone else returns null, identically to one that
-   * never existed. Distinguishing the two would confirm to a caller holding a
-   * guessed id that it had named something real.
+   * ## Why naming it is the proof
+   *
+   * This used to also require `ownerKey` to match, and `ownerKey` is
+   * `sha256(access token)` — which made a job readable only by the exact
+   * bearer string that started it. That is a stricter rule than it sounds,
+   * because the token MOVES. The authorization server advertises
+   * `refresh_token` and access tokens last an hour, so ChatGPT refreshes
+   * mid-conversation; the moment it does, every job started before the refresh
+   * becomes unreadable and `check_generation` reports "no job with that id is
+   * being tracked" about work that is running perfectly well. The same wall
+   * stands between the same person's phone and laptop, which hold different
+   * tokens for the same account. A booth creation runs 2-6 minutes and the
+   * live card polls throughout; an hour-long conversation crossing a refresh
+   * is ordinary, not an edge case.
+   *
+   * So ownership is carried by the id instead. `randomUUID()` is 122 bits of
+   * entropy, it is returned only in the result of the start/refine/create call
+   * that minted it, and it goes nowhere else — not into a log line, not into a
+   * URL. A caller that can name a job is therefore a caller that was handed
+   * it, which is the same conclusion the token hash was being used to reach,
+   * reached by something that does not expire.
+   *
+   * ## What this gives up, stated plainly
+   *
+   * A guessed id is no longer refused. It is not *findable* — a v4 UUID is not
+   * enumerable and the store holds at most a few dozen at a time — but the
+   * check is now unguessability rather than a credential comparison, and those
+   * are different guarantees. Two things still hold the line: a caller must
+   * present SOME token to get this far (`check_generation` resolves
+   * `studio.ownerKey()`, which throws without one, and the HTTP transport 401s
+   * the call before dispatch), and {@link list} is still owner-scoped, so
+   * nobody can enumerate what they were not given.
+   *
+   * An id that never existed and an id that has been swept return the same
+   * `null`, unchanged.
    */
-  get<T>(ownerKey: string, id: string): Job<T> | null {
+  byId<T>(id: string): Job<T> | null {
     this.sweep();
     const job = this.jobs.get(id);
-    if (!job || job.ownerKey !== ownerKey) return null;
-    return publicView(job) as Job<T>;
+    return job ? (publicView(job) as Job<T>) : null;
   }
 
-  /** Every job this caller has, newest first — so "is it done yet?" needs no id. */
+  /**
+   * Every job this caller has, newest first — so "is it done yet?" needs no id.
+   *
+   * Still keyed to the token hash, deliberately: this is the one call that
+   * answers a question nobody supplied an id for, so there is nothing else to
+   * establish who is asking. The cost is that it goes quiet after a token
+   * refresh — the jobs are still there and still readable by {@link byId},
+   * they just stop being listed. `check_generation` says so rather than
+   * reporting that no work was ever started.
+   */
   list<T>(ownerKey: string): Job<T>[] {
     this.sweep();
     return [...this.jobs.values()]
