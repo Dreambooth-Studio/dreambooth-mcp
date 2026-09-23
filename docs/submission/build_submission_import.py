@@ -143,8 +143,8 @@ J = {
   },
   "duplicate_project": {
     "read_only_justification": "It creates a copy of a booth the operator already owns, from an id they supply. The original is unchanged. It adds a new booth and nothing else.",
-    "destructive_justification": "It only adds. It cannot edit, rename, deactivate or delete the original or any other booth. The copy gets its own link name, so nothing published changes; undoing it is one click in the dashboard.",
-    "open_world_justification": "Open world: it creates a booth on Dreambooth Studio, reachable at its own public link. The source is looked up under the token's operator, so another account's booth cannot be copied.",
+    "destructive_justification": "It only adds. It cannot edit, rename, deactivate or delete the original or any other booth. The copy carries no public link, so nothing published changes; undoing it is one click in the dashboard.",
+    "open_world_justification": "Open world: it creates a booth on the operator's account on Dreambooth Studio, an external service. The copy has no public link until they publish one; another account's booth cannot be copied.",
   },
   "start_frame": {
     "read_only_justification": "Not read-only: it opens a design thread and makes one AI image on the operator's own account. It adds a draft generation; it edits, replaces or removes nothing, and saves no frame.",
@@ -159,7 +159,7 @@ J = {
   "check_generation": {
     "read_only_justification": "Reads the state of a background job held in this server's memory. It never calls Dreambooth and never writes anything.",
     "destructive_justification": "A status read. Asking it any number of times creates, edits or removes nothing; it only reports what a start/refine/create job has done so far.",
-    "open_world_justification": "Closed world: no outbound call at all. It reads a job record in this server's own memory, keyed to a hash of the caller's token, so it cannot even see another connection's jobs.",
+    "open_world_justification": "Closed world: no outbound call at all. It reads a job record in this server's own memory, named by an unguessable id given only to the caller that started the work; it can list no other.",
   },
   "save_frame": {
     "read_only_justification": "Not read-only: it turns one chosen generation into a new frame on the operator's account. It only ever adds a frame; it edits, replaces or removes none.",
