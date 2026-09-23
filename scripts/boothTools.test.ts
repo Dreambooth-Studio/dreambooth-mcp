@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { createServer } from "../src/mcp/server.js";
+import { createServer, BOOTH_TOOLS_LIVE } from "../src/mcp/server.js";
 import { SessionTokens } from "../src/auth/tokenStore.js";
 import { buildStartBooth } from "../src/tools/startBooth.js";
 import { buildRefineBooth, refineBody } from "../src/tools/refineBooth.js";
@@ -133,19 +133,38 @@ async function toolNames(bearerAuth: boolean): Promise<string[]> {
   return listed.tools.map((t) => t.name);
 }
 
-test("the booth tools and preview_filter live on the OAuth path only", async () => {
+test("the booth tools are registered only when the Studio can serve them", async () => {
+  // Everything they call is gated on the Studio's `digital_mode` flag, which
+  // is off, so those routes 404 for everyone. Advertising five tools that
+  // cannot work is a promise the product cannot keep — see BOOTH_TOOLS_LIVE.
+  // Asserting against the constant rather than against `false` means flipping
+  // it flips this test with it, instead of leaving a stale expectation behind.
   const withBearer = await toolNames(true);
-  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) assert.ok(withBearer.includes(name), name);
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS]) {
+    assert.equal(withBearer.includes(name), BOOTH_TOOLS_LIVE, name);
+  }
+  // preview_filter is not a booth tool. /api/filters/preview carries no flag
+  // and answers today, so it is unaffected either way.
+  assert.ok(withBearer.includes("preview_filter"));
   const anonymous = await toolNames(false);
-  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) assert.ok(!anonymous.includes(name), name);
+  assert.ok(!anonymous.includes("preview_filter"));
 });
 
-test("all of them are listed as needing auth, so a call without one starts a sign-in", () => {
-  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) {
-    assert.ok(AUTH_REQUIRED_TOOLS.has(name), name);
+test("the auth list tracks the registration, so nothing 401s for a tool that is not there", () => {
+  // The invariant this exists for: a name in AUTH_REQUIRED_TOOLS that
+  // createServer never registers turns a call into a 401 that starts a sign-in
+  // for a tool that does not exist. The operator approves an account and the
+  // retry still answers "unknown tool". The two lists move together.
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS]) {
+    assert.equal(AUTH_REQUIRED_TOOLS.has(name), BOOTH_TOOLS_LIVE, name);
     const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
-    assert.equal(requiresAuth(call), true, name);
+    assert.equal(requiresAuth(call), BOOTH_TOOLS_LIVE, name);
   }
+  assert.ok(AUTH_REQUIRED_TOOLS.has("preview_filter"));
+  assert.equal(
+    requiresAuth({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "preview_filter" } }),
+    true,
+  );
 });
 
 test("booth tools create; preview_filter and check_generation do not", async () => {
@@ -162,14 +181,33 @@ test("booth tools create; preview_filter and check_generation do not", async () 
   await client.close();
   await server.close();
 
+  const meta = (name: string) =>
+    (listed.tools.find((t) => t.name === name) as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {};
+
+  for (const name of ["preview_filter", "check_generation"]) {
+    const tool = listed.tools.find((t) => t.name === name);
+    assert.equal(tool?.annotations?.readOnlyHint, true, name);
+  }
+  // A filter is visible from the moment it is asked for: the preview renders
+  // on the generation card, and so does the created filter, with its real
+  // preview image.
+  for (const name of ["preview_filter", "create_filter"]) {
+    assert.equal(meta(name)["openai/outputTemplate"], "ui://widget/generation.html", name);
+  }
+
+  // The booth half of this only means anything while the booth tools are
+  // registered. Kept in one piece rather than deleted: it is the assertion
+  // that has to pass again on the day BOOTH_TOOLS_LIVE flips.
+  if (!BOOTH_TOOLS_LIVE) return;
+
   for (const name of BOOTH_TOOLS) {
     const tool = listed.tools.find((t) => t.name === name);
     assert.equal(tool?.annotations?.readOnlyHint, false, name);
     assert.equal(tool?.annotations?.idempotentHint, false, name);
   }
-  for (const name of ["preview_filter", "check_generation", "get_booth_draft"]) {
-    const tool = listed.tools.find((t) => t.name === name);
-    assert.equal(tool?.annotations?.readOnlyHint, true, name);
+  {
+    const tool = listed.tools.find((t) => t.name === "get_booth_draft");
+    assert.equal(tool?.annotations?.readOnlyHint, true);
   }
   // Editing a draft changes it (not read-only) but replaces nothing published
   // (not destructive), and the same edit twice leaves the same draft. It does
@@ -182,14 +220,10 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     assert.equal(tool?.annotations?.idempotentHint, true);
     assert.equal(tool?.annotations?.openWorldHint, true);
   }
-
   // A booth is visible from the moment it is asked for: the start, refine and
-  // create handles render the live generation card (a phone skeleton that
-  // polls check_generation), the preview renders there, and so does the
-  // created filter — with its real preview image.
-  const meta = (name: string) =>
-    (listed.tools.find((t) => t.name === name) as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {};
-  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter", "create_filter"]) {
+  // create handles render the live generation card, a phone skeleton that
+  // polls check_generation.
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS]) {
     assert.equal(meta(name)["openai/outputTemplate"], "ui://widget/generation.html", name);
   }
 });
@@ -639,7 +673,15 @@ test("create_booth refuses a second create for the same draft while one runs", a
  * a client-side protocol error the operator experiences as a hang. Only a
  * round trip through a real client can see that.
  */
-test("every booth and filter-preview result satisfies the published output schema", async () => {
+/**
+ * Skipped, not deleted, while the booth tools are unregistered: it drives them
+ * through a real client, so there is nothing to call. It is also the test that
+ * has to pass before the booth flow ships, so it stays where it is and comes
+ * back on its own when BOOTH_TOOLS_LIVE flips.
+ */
+test("every booth and filter-preview result satisfies the published output schema", {
+  skip: BOOTH_TOOLS_LIVE ? false : "booth tools are not registered — see BOOTH_TOOLS_LIVE",
+}, async () => {
   const releases: Array<(r: Response) => void> = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = (() =>

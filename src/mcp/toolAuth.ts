@@ -29,17 +29,23 @@ export const AUTH_REQUIRED_TOOLS = new Set([
   "refine_frame",
   "check_generation",
   "save_frame",
-  "start_booth",
-  "refine_booth",
-  "create_booth",
-  "update_booth_draft",
-  // Read-only, but it reads the operator's draft from the Studio: a call
-  // without a token should start a sign-in, not answer "not connected".
-  "get_booth_draft",
   // Read-only, but it calls the Studio and exists only as the first half of
   // create_filter: a call without a token should start a sign-in, not answer
   // "not connected".
   "preview_filter",
+  /**
+   * DELIBERATELY ABSENT: `start_booth`, `refine_booth`, `create_booth`,
+   * `get_booth_draft`, `update_booth_draft`.
+   *
+   * They are not registered while `BOOTH_TOOLS_LIVE` is false, and this list
+   * must not outlive the registration. A name here that `createServer` never
+   * registers turns a call into a 401 that starts a sign-in for a tool that
+   * does not exist — the operator approves an account and the retry still
+   * answers "unknown tool". An unregistered tool should say it is unknown,
+   * which is the truth and the only answer a model can act on.
+   *
+   * Put all five back the moment the registrations come back.
+   */
 ]);
 
 /**
