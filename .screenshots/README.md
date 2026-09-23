@@ -2,16 +2,35 @@
 
 ## portal/ — what to upload
 
-Four PNGs, each exactly **706 x 860**, one per thing the app can make: a booth
-draft, a frame preview, a filter preview, and a created booth. Build them with
+**Two** PNGs, each exactly **706 x 860**: a frame preview and a filter preview.
+Build them with
 
     npx tsx .screenshots/build/build_cards.ts
     node .screenshots/build/render_portal.js .screenshots/portal
 
+It was three until 2026-09-23. The booth draft is in `parked/` because the app
+no longer offers it: `BOOTH_TOOLS_LIVE` is false in `src/mcp/server.ts` while
+the Studio's `digital_mode` flag is off, so `start_booth` is not registered and
+a card showing a booth draft is a picture of a feature a reviewer cannot reach.
+That is the one thing the plugin guidelines are explicit about — screenshots
+"must accurately represent the plugin's functionality" — so it comes out rather
+than being left in as the prettiest of the three.
+
+A fourth, the created booth, was never built at all: `build_cards_real.ts`
+renders only what the capture run reached, and the 2026-09-07 run stopped before
+`create_booth`. Worth remembering when booths come back, because it means that
+path has never produced a verified artifact.
+
+When `digital_mode` ships: flip `BOOTH_TOOLS_LIVE`, run the capture again so it
+reaches `create_booth`, and move `parked/booth-draft.png` back — renumbered, or
+regenerated, but not reused blind. The parked card shows Garden Gold at
+`dreambooth.app/gardengold`, which will not be the booth the new run makes.
+
 The portal's rule is 706 px wide, 400-860 px high, at most 4 images, and the
 plugin guidelines add that screenshots "must accurately represent the plugin's
 functionality and comply with the required dimensions" — they are **optional**,
-so a small correct set beats a large flawed one.
+so a small correct set beats a large flawed one. Two accurate images is a
+better submission than three where one shows a tool that is not there.
 
 `render_portal.js` puts the card on a 353x430 CSS stage (706x860 at 2x) and
 **scales it down until the whole card fits**. That is the difference from the
