@@ -77,13 +77,22 @@ const CARDS: { file: string; toolOutput: Payload | null }[] = [
      * listing shows a starter prompt beside the picture. A card has to be the
      * answer to the prompt it sits next to, and only the first turn is.
      *
-     * The first generation is also the better picture, which was not luck.
-     * `promptBuilder.ts` requires photo windows to stay flat opaque #00FF00 so
-     * `frameFromThreadGeneration` can key them out on save; the refine turn
-     * decorated three of the six holes with brown floral instead, so its image
-     * shows three green slots and three brown ones. It reads as a rendering
-     * fault. (The frame SAVED from that generation is genuinely broken for the
-     * same reason - worth fixing on the product side, separately.)
+     * The first generation is also the better picture. `promptBuilder.ts`
+     * requires photo windows to stay flat opaque #00FF00; the refine turn
+     * decorated three of the six holes with brown floral instead, so ITS
+     * image shows three green slots and three brown ones and reads as a
+     * rendering fault. The first turn's six windows are clean and uniform.
+     *
+     * That is a statement about the PREVIEW only. An earlier version of this
+     * comment claimed the frame saved from that generation was broken too;
+     * it is not, and the mistake is worth recording because it is easy to
+     * repeat: a generation PNG carries no alpha, so what you see is what it
+     * is, but a SAVED frame is keyed and its RGB is untouched underneath
+     * alpha=0. Flattened in a viewer it looks exactly like the un-keyed
+     * image. Read the alpha channel, not the picture. Measured on
+     * `ai-frame-1788773137303-05d6b6ff.png`: 74.8% fully transparent, all six
+     * windows clear. `cutFrameSlotWindows` force-clears any slot under 90%
+     * open, which is precisely the decorated-hole case, and it worked.
      */
     file: "frame-preview-light",
     toolOutput: pick("frame preview", (b) => done(b, "generation") && Boolean(b.imageUrl), "first"),
