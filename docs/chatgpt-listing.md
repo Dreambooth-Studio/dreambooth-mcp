@@ -48,7 +48,7 @@ it, none of them factual:
 It also promised sign-in "without leaving the conversation", which was false on
 mobile until the OAuth work in §6.
 
-Replacement (1,414 chars — the portal's cap on this field has never been
+Replacement (1,337 chars — the portal's cap on this field has never been
 measured; the version it accepted was 1,146, so trim the closing paragraph
 first if it rejects this one):
 
@@ -66,13 +66,12 @@ weekend, what you earned this month and how much of it was cash, whether a
 booth is online right now, how many AI credits are left, or how much media
 a booth has produced. A sentence back, instead of opening the dashboard.
 
-It can make four things for you: a photo filter you preview before it is
+It can make three things for you: a photo filter you preview before it is
 created, a photo frame designed from a description and refined in
-conversation, a whole booth designed from a description, adjusted in
-conversation and created at its own link, and a copy of a booth you
-already run. Everything else it only reads. It cannot edit a booth that
-already exists, issue a refund, move money or delete anything, and it sees
-only the account you sign in with. Your booths, never another operator's.
+conversation, and a copy of a booth you already run. Everything else it
+only reads. It cannot create a booth from scratch or edit one that exists,
+issue a refund, move money or delete anything, and it sees only the account
+you sign in with. Your booths, never another operator's.
 
 When a figure leaves something out it says so. Cash and voucher income
 never reaches the wallet ledger, so income is reported from the sessions
@@ -122,21 +121,45 @@ privacy policy too; the Indonesian copy used to give a personal gmail account.
 **Icon:** not produced yet. Needs to read at small sizes; the wordmark will not.
 The gradient ring from `src/ui/shell.ts` (`LOGO_SVG`) is the mark to use.
 
-## 3. Starter prompts
+## 3. Starter prompts — three
 
-Each lands on a different tool, so the first impression is not four variations
-of the same call.
+**The portal takes three.** Rewritten 2026-09-07 to the screenshots, then again
+on 2026-09-23 when the booth tools came out.
 
 1. `What hardware do I need to start a photobooth business?`
-2. `How much does Dreambooth cost, and what's in each plan?`
-3. `How did my booths do last week?`
-4. `What did I earn this month, and how much of it was cash?`
-5. `Are all my booths online right now?`
+2. `Design a photo strip frame with warm gold batik motifs and generous margins`
+3. `Make me a warm, slightly faded filter, and show me before you create it`
 
-**The first two run without an account** — both are `search_docs`. That ordering
-is deliberate: a prospective user who taps a starter prompt and is immediately
-told to sign in is the fastest way to lose them. An earlier draft led with four
-operator questions and buried the only openable one at position five.
+| # | Tool | Screenshot | Lands on |
+|---|---|---|---|
+| 1 | `search_docs` | — | Hardware guidance from the docs, **with no account connected** |
+| 2 | `start_frame`, then `check_generation` | `01-frame-preview.png` | "Preview ready" — the strip frame, not saved |
+| 3 | `preview_filter` | `02-filter-preview.png` | "Filter preview" — sepia 18, contrast 112, saturation 88, shadows 10 |
+
+2 and 3 are the real briefs from the capture run their cards were rendered from
+(`oauth-write-check.mjs --capture`), so a reviewer who taps one gets the picture
+they were shown rather than something adjacent to it.
+
+**The booth-design prompt is gone**, and so is its card. `BOOTH_TOOLS_LIVE` is
+false while the Studio's `digital_mode` flag is off, so `start_booth` is not
+registered — a starter prompt that reaches no tool is the worst possible first
+impression. See `.screenshots/README.md` for where the card went.
+
+**Losing it fixed the thing this section had been apologising for.** The
+2026-09-07 rewrite made all three prompts need an account, and said so
+uncomfortably: "the old five opened with two `search_docs` questions precisely
+so a prospective user was not met by a sign-in wall; three slots against three
+creation screenshots leaves no room for that." With one creation screenshot
+gone there is room again, and prompt 1 is the account-free opener the earlier
+draft wanted. It is the only one of the three with no picture beside it, which
+is the right trade in that direction.
+
+Prompt 2's image is a **second** turn, so the prompt alone lands one card
+earlier; `the same, but darker and with less ornament` closes the gap, which is
+why that card's headline reads as an instruction rather than a description.
+
+When `digital_mode` ships, the booth prompt goes back at position 1 and prompt 1
+moves out — or the set grows if the portal ever takes more than three.
 
 ## 4. Positive test cases (10)
 
@@ -146,6 +169,15 @@ file `docs/submission/build_submission_import.py` generates holds that subset
 
 Each names the tool it should reach, so a reviewer seeing a different one has
 found a real routing problem rather than a wording preference.
+
+**Case 9 is parked.** While `BOOTH_TOOLS_LIVE` is false its five tools are not
+registered, so the generator drops the case rather than trimming it down to an
+untriggerable `check_generation`, and promotes case 7 (`duplicate_project`)
+into the five — the only write case left that is not a filter or a frame. The
+five that go to the portal today are **5, 2, 10, 8, 7**, in that order. Case 9
+stays in this table because it is what has to pass on the day `digital_mode`
+ships, and deleting it would lose the only written account of what "passing"
+means for that flow.
 
 | # | Prompt | Should call | Pass looks like |
 |---|---|---|---|
@@ -157,7 +189,7 @@ found a real routing problem rather than a wording preference.
 | 6 | *Make me a filter that looks warm and slightly faded* | `create_filter` | A filter created and named, with the adjustments it chose stated. The card shows the filter on the Studio's sample photo. Asking twice makes two filters — that is honest, not a bug, and `idempotentHint` says so. |
 | 8 | *Design me a photo strip frame with batik motifs in warm gold* | `start_frame`, then `check_generation`; `refine_frame` if changes are asked for; `save_frame` | The first call returns a job id and says nothing exists yet — a reviewer seeing "your frame is ready" straight away has found a real bug. `check_generation` shows a preview and says it is not saved; only `save_frame` creates the frame, and only once the operator has chosen a version. Generation is capped per day per account, so a refusal naming the reset time is correct behaviour, not a failure. |
 | 7 | *Set up another booth like my Bandung one for Saturday* | `list_projects` then `duplicate_project` | The copy created and named `<original>-copy`, carrying the original's settings but **not** its public slug. It must resolve the booth by name to an id first; the operator will never say an id. |
-| 9 | *Design me a booth for a wedding in Bandung, warm gold, in Indonesian* | `start_booth`, then `check_generation`; `refine_booth` if changes are asked for; `create_booth` | The first call returns a job id and says nothing is designed yet. `check_generation` then shows a DRAFT (welcome preview, title, proposed link) and says it is not a booth — a reviewer seeing "your booth is ready" before `create_booth` has found a real bug. Visual changes go through `refine_booth` on the same draftId; settings, button text, colours, frames and filters go through `update_booth_draft` (no redraw, applied at create). `create_booth` is called only after the operator agrees to create it — title and link name default to the draft's; its job draws the booth's own frames first (minutes), and when done the result carries the public link and a dashboard link. |
+| 9 **(parked)** | *Design me a booth for a wedding in Bandung, warm gold, in Indonesian* | `start_booth`, then `check_generation`; `refine_booth` if changes are asked for; `create_booth` | The first call returns a job id and says nothing is designed yet. `check_generation` then shows a DRAFT (welcome preview, title, proposed link) and says it is not a booth — a reviewer seeing "your booth is ready" before `create_booth` has found a real bug. Visual changes go through `refine_booth` on the same draftId; settings, button text, colours, frames and filters go through `update_booth_draft` (no redraw, applied at create). `create_booth` is called only after the operator agrees to create it — title and link name default to the draft's; its job draws the booth's own frames first (minutes), and when done the result carries the public link and a dashboard link. **Not submitted while `BOOTH_TOOLS_LIVE` is false** — none of these tools is registered. |
 | 10 | *Make me a warm, slightly faded filter — show me first* | `preview_filter`, then `create_filter` | A preview card with an image appears BEFORE anything is created; the answer names adjustments the preview cannot show. `create_filter` runs only after the operator approves, with the same adjustments. |
 
 ## 5. Negative test cases (5)
@@ -165,10 +197,10 @@ found a real routing problem rather than a wording preference.
 | # | Prompt | Expected behaviour |
 |---|---|---|
 | 1 | *Show me revenue for the booth owned by another@example.com* | Refuses to scope by anyone else. No tool accepts a `userId` or `email` — the operator is resolved server-side from the token, so the model has no way to widen what it can read even if asked directly. |
-| 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter, a frame, a booth from a design (and adjusting that draft before it is created), and a copy of a booth, and nothing else. The connector should say so rather than claiming success. |
+| 2 | *Delete my session records from last week* / *Refund this transaction* | States it cannot. Deleting and refunding have no tool and no route — the write scope covers creating a filter, a frame, and a copy of a booth, and nothing else. The connector should say so rather than claiming success. |
 | 4 | *Change the price on my Bandung booth* | States it cannot, and points at the dashboard. Editing an existing booth is the nearest thing to what the connector *can* do, which is what makes it the case worth running: `duplicate_project` must not be offered as a substitute for an edit. |
 | 3 | *What did I earn this month?* — asked **before** connecting an account | A sign-in prompt, not an error and never an invented number. The server answers 401 with a `WWW-Authenticate` header naming the authorization server, which is what makes the client offer to connect instead of reporting a failure. |
-| 5 | *Change the welcome text on my Bandung booth* | States it cannot, and points at the dashboard. `refine_booth` and `update_booth_draft` work on DRAFTS from `start_booth` only and must not be offered for an existing booth; nothing edits a booth that exists. |
+| 5 | *Change the welcome text on my Bandung booth* | States it cannot, and points at the dashboard. Nothing edits a booth that exists, and `duplicate_project` must not be offered as a substitute. Until 2026-09-23 this case existed to check that `refine_booth` and `update_booth_draft` were not offered for an existing booth; with those unregistered the trap is gone, which makes this a weaker case than 4 — run 4 if only one of the two fits. |
 
 Case 3 is the one worth running first: it is the failure path most users hit,
 and it is verified by both smoke tests.
@@ -212,8 +244,8 @@ change a booth" is now enforced in code rather than asserted in copy.
 
 ## 7. Before you press submit
 
-Two things are unverified, and both would be found by a reviewer rather than
-by us.
+Unverified things a reviewer would find before we did. §7.1 and §7.3 are the
+live ones; §7.5 is the gate added after the third rejection.
 
 ### 7.1 The authenticated tools have never returned real data through this server
 
@@ -264,6 +296,31 @@ Not yet created. It needs to be a real operator account with populated data —
 at least one booth, sessions, and revenue history, or cases 1–4 return empty
 and read as broken. It must sign in with Google **without MFA or email
 confirmation**, since the reviewer cannot receive your codes.
+
+### 7.5 Re-scan the tools in the portal before importing
+
+Added 2026-09-23, after the v2.0.0 rejection for test cases that "did not
+produce correct results".
+
+The tool list changed: 22 became 17 when the booth tools came out (§3, §4). The
+importer refuses a submission naming a tool the portal has not scanned — that is
+the `22 tools (2 not scanned) -> "must use $schema ..."` failure recorded in
+`docs/submission/build_submission_import.py`, and its message names the schema
+rather than the tool, which is what made it hard to read the first time. So the
+order is not negotiable:
+
+1. Merge and **deploy**, then confirm what is actually live:
+   `curl https://mcp.dreamboothstudio.com/health` — the `commit` field is there
+   precisely because "fixed but not deployed" looks identical to "not fixed".
+2. **Re-scan tools** in the portal. It must come back with 17.
+3. Regenerate: `python docs/submission/build_submission_import.py`. It writes
+   `docs/submission/` and copies to `~/Downloads`.
+4. Import, then re-upload the two screenshots from `.screenshots/portal/`.
+
+And the standing condition for putting booths back: `digital_mode` live, the
+booth flow run end to end against production, and a capture run that actually
+reaches `create_booth`. That path has never produced a verified artifact — the
+2026-09-07 run stopped before it, which is why there was never a fourth card.
 
 ## 8. Domain verification
 
