@@ -20,7 +20,7 @@ v0.1.0 (registry versions are immutable, so that entry stays at 0.1.0).
 
 `session_info` is an eleventh, registered only when `MCP_DIAGNOSTICS=1`.
 
-**Twelve more appear only on an OAuth session** (see the gate below):
+**Twelve more, listed on every connection** (see below for what guards them):
 
 | | |
 |---|---|
@@ -37,14 +37,23 @@ being granted. This server is a protected resource in front of it (RFC 9728).
 Both discovery documents are live.
 
 The **device flow is the older path and keeps the older properties** — its
-token is a year long, unscoped and unrevocable. That asymmetry is the whole
-gate: the twelve tools above are registered only when the session carries a
-bearer token (`session.bearerAuth`), so on stdio and on a device-flow session a
-model cannot promise something the Studio would refuse. There is **no feature
+token is a year long, unscoped and unrevocable, so it must not be able to
+write. It cannot: the Studio refuses it with a 403 and a sentence naming the
+fix, exactly as it refuses a read-scoped OAuth token.
+
+**The tool list is the same on every connection.** The twelve above used to be
+registered only when a request carried a bearer, which made `tools/list` answer
+10 tools with no `Authorization` header and 22 with any string as one — the
+check was on the header's presence, not on anything in it. That is gone. An
+inventory that moves is unusable: the ChatGPT submission portal scans from the
+browser with no credential, so it could only ever see the read half while the
+submission declared all 22, and any client caching a pre-sign-in list keeps
+offering ten tools to an operator who has connected an account. What guards
+these tools now is what always decided the outcome anyway — `AUTH_REQUIRED_TOOLS`
+turns an uncredentialled call into the 401 that *starts* the OAuth flow, and
+the Studio's 403 answers a token without `booths:write`. There is **no feature
 flag** in this — an earlier version of this README described one, and it was
-removed; deploy order is what guards a new tool. The gate checks for a token,
-not for its scope: a read-scoped OAuth connection still *sees* the write tools
-and gets a 403 on calling one, with a sentence naming the fix. See
+removed; deploy order is what guards a new tool. See
 [Connecting an account](#connecting-an-account).
 
 Design: [`docs/dreambooth-mcp-design.md`](../dreambooth-prod/docs/dreambooth-mcp-design.md)
@@ -115,10 +124,12 @@ credential belongs to the request that carried it and is never written into a
 session, where a later request quoting the same session id could read it.
 
 The two credentials are deliberately **not** equivalent in what they may do. The
-write tools exist only on the OAuth path, and the Studio refuses a non-GET from
-a device-flow token on any route that opted into connector writes — the weaker
-credential must not inherit access granted to the stronger one. Everything the
-booth fleet POSTs with that token is untouched.
+Studio refuses a non-GET from a device-flow token on any route that opted into
+connector writes — the weaker credential must not inherit access granted to the
+stronger one. Everything the booth fleet POSTs with that token is untouched.
+The write tools are still *listed* on a device-flow session, because the tool
+list must not depend on the credential; calling one there returns the Studio's
+403 and its sentence, which tells the operator what to do instead.
 
 Reading is unchanged on both: a session that never connects an account can read
 nothing but `search_docs`.
@@ -298,14 +309,16 @@ produces a frame that is created successfully and prints wrong — a failure
 that reports nothing. The saved frame's photo windows are keyed transparent by
 the same server code the /new onboarding flow uses.
 
-**They are registered only when the request carries its own bearer token** —
-that is, on the OAuth path. On stdio, and on a device-flow HTTP session, they
-do not appear in `tools/list` at all. Writing requires a credential that
-expires in an hour, carries a scope and can be revoked; the device flow's token
-is one year, unscoped and unrevocable, and must not inherit access granted to
-the other one. The Studio enforces the same rule independently — see
-`utils/resolveAuthSession.ts` there, and [`docs/write-tools-plan.md`](docs/write-tools-plan.md)
-for why the gate here cannot check the scope itself.
+**They are listed everywhere and usable only on the OAuth path.** Writing
+requires a credential that expires in an hour, carries a scope and can be
+revoked; the device flow's token is one year, unscoped and unrevocable, and
+must not inherit access granted to the other one. That rule is enforced where
+it can actually be evaluated — by the Studio, which holds the key to the
+next-auth JWE this server cannot read a scope out of. See
+`utils/resolveAuthSession.ts` there, and [`docs/write-tools-plan.md`](docs/write-tools-plan.md).
+Until 2026-09-23 it was *also* approximated here, by registering these tools
+only when a request carried a bearer; that made the tool list depend on an HTTP
+header and was removed.
 
 Nothing deletes and nothing touches money. There is no `put` or `delete` on
 `StudioClient`; the Studio opened exactly eight POST handlers to it —

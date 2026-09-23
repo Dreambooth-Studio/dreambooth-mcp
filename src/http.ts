@@ -200,11 +200,14 @@ data: {…}` buys nothing
     allowedHosts: config.allowedHosts.length ? config.allowedHosts : undefined,
   });
 
+  // The token reaches the tools through `tokens`, never through the session
+  // context. Whether this request carried one used to decide which tools were
+  // registered, which made the inventory depend on a header; see the note above
+  // the write tools in createServer for why that is gone.
   const server = createServer(config, tokens, {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: token !== null,
   });
 
   // Closed on the response, not after handleRequest returns: the response may

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+
 import { SUPPORTED_SCOPES, SCOPE_STRING, READ_SCOPE, WRITE_SCOPE } from "../src/auth/scopes.js";
+import { createServer } from "../src/mcp/server.js";
+import { AUTH_REQUIRED_TOOLS } from "../src/mcp/toolAuth.js";
+import { SessionTokens } from "../src/auth/tokenStore.js";
 import { registerWellKnown } from "../src/mcp/wellKnown.js";
 import { sendUnauthorized } from "../src/auth/challenge.js";
 import type { Config } from "../src/config.js";
@@ -31,6 +37,16 @@ const CONFIG = {
   // removed — adding a host must not silently change the server's identity.
   publicHost: "mcp.example",
   allowedHosts: ["mcp.example"],
+} as unknown as Config;
+
+/**
+ * `CONFIG` above is shaped for the metadata documents and says nothing about
+ * the Studio. Building a server needs the other half.
+ */
+const SERVER_CONFIG = {
+  ...CONFIG,
+  apiUrl: "https://studio.example",
+  diagnostics: false,
 } as unknown as Config;
 
 /** Captures whatever `registerWellKnown` hands to `app.get`. */
@@ -111,4 +127,101 @@ test("the 401 challenge names the scopes a client may request", () => {
   // Still carries what it carried before — this is an addition, not a rewrite.
   assert.match(challenge, /resource_metadata="https:\/\/mcp\.example\/\.well-known\/oauth-protected-resource\/mcp"/);
   assert.match(challenge, /error="invalid_token"/);
+});
+
+/* ------------------------------------------------- the inventory itself --- */
+
+/**
+ * The tool and widget inventory an uncredentialled client is shown.
+ *
+ * This is the same question as the two documents above — what a client reads
+ * BEFORE it has a token — and it had the worst answer of the three. The write
+ * tools were registered only when a request carried an `Authorization` header,
+ * and the check was on the header's PRESENCE, not on anything in it. So
+ * `tools/list` answered 10 tools to a client with no credential and 22 to one
+ * sending any string at all, and `resources/list` answered 1 widget or 3.
+ *
+ * Nothing that consumes a tool list expects it to move. The ChatGPT submission
+ * portal scans from the browser with no credential, so it could only ever see
+ * the read half while the submission declared all 22; a client that caches the
+ * list it got before sign-in goes on offering ten tools to an operator who has
+ * since connected an account; and a directory reviewer running a test case
+ * against a tool the scan never saw finds it missing.
+ *
+ * The counts are written out rather than compared against a second build of
+ * the same server, because a test that compares the server to itself passes
+ * whatever the server does. A number has to be edited by whoever changes it.
+ */
+
+const EXPECTED_TOOLS = [
+  "check_generation",
+  "connect_account",
+  "connection_status",
+  "create_booth",
+  "create_filter",
+  "duplicate_project",
+  "get_booth_draft",
+  "get_credits",
+  "get_gallery_stats",
+  "get_project",
+  "get_revenue_summary",
+  "get_sessions",
+  "get_wallet_transactions",
+  "list_projects",
+  "preview_filter",
+  "refine_booth",
+  "refine_frame",
+  "save_frame",
+  "search_docs",
+  "start_booth",
+  "start_frame",
+  "update_booth_draft",
+];
+
+const EXPECTED_WIDGETS = [
+  "ui://widget/connect-account.html",
+  "ui://widget/generation.html",
+  "ui://widget/write-result.html",
+];
+
+/** Everything a client can discover, on a connection carrying no credential. */
+async function discovered() {
+  const server = createServer(SERVER_CONFIG, new SessionTokens(), {
+    transport: "http",
+    sessionId: () => undefined,
+    stateless: true,
+  });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "test", version: "0" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  const [tools, resources] = await Promise.all([client.listTools(), client.listResources()]);
+  await client.close();
+  await server.close();
+  return {
+    tools: tools.tools.map((t) => t.name).sort(),
+    widgets: resources.resources.map((r) => String(r.uri)).sort(),
+  };
+}
+
+test("every tool is advertised before a credential exists, not only after", async () => {
+  const { tools } = await discovered();
+  assert.deepEqual(tools, EXPECTED_TOOLS);
+});
+
+test("every widget is advertised before a credential exists", async () => {
+  // A card with no resource behind it does not degrade to text — the client
+  // has nothing to render. Two of these three used to appear only alongside a
+  // bearer, which is the same defect as the tools and breaks the same reviewer.
+  const { widgets } = await discovered();
+  assert.deepEqual(widgets, EXPECTED_WIDGETS);
+});
+
+test("the tools that need an account are refused by the transport, not hidden", async () => {
+  // The invariant that makes advertising them safe: listing a tool an
+  // uncredentialled caller cannot use is only honest if the call is answered
+  // with the 401 that starts a sign-in. Anything NOT in this set must be
+  // genuinely usable with no account.
+  const { tools } = await discovered();
+  const open = tools.filter((name) => !AUTH_REQUIRED_TOOLS.has(name));
+  assert.deepEqual(open, ["connect_account", "connection_status", "search_docs"]);
 });

@@ -115,14 +115,13 @@ const drained = async () => {
   for (let i = 0; i < 12; i++) await settled();
 };
 
-/* ------------------------------------------------------------- the gate --- */
+/* -------------------------------------------------------- the inventory --- */
 
-async function toolNames(bearerAuth: boolean): Promise<string[]> {
+async function toolNames(): Promise<string[]> {
   const server = createServer(CONFIG, new SessionTokens(), {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -133,11 +132,12 @@ async function toolNames(bearerAuth: boolean): Promise<string[]> {
   return listed.tools.map((t) => t.name);
 }
 
-test("the booth tools and preview_filter live on the OAuth path only", async () => {
-  const withBearer = await toolNames(true);
-  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) assert.ok(withBearer.includes(name), name);
-  const anonymous = await toolNames(false);
-  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) assert.ok(!anonymous.includes(name), name);
+test("the booth tools and preview_filter are listed with no credential present", async () => {
+  // They used to be registered only alongside an `Authorization` header, which
+  // is how the tool list came to depend on who was asking. The credential now
+  // decides whether a CALL succeeds, never whether the tool is advertised.
+  const listed = await toolNames();
+  for (const name of [...BOOTH_TOOLS, ...DRAFT_TOOLS, "preview_filter"]) assert.ok(listed.includes(name), name);
 });
 
 test("all of them are listed as needing auth, so a call without one starts a sign-in", () => {
@@ -153,7 +153,6 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -657,7 +656,6 @@ test("every booth and filter-preview result satisfies the published output schem
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });

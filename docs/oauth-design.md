@@ -14,8 +14,10 @@ Two things below have moved since:
 
 - **"Token design — this is the Phase 3 debt"** is paid, but only on the OAuth
   path. The device flow keeps every property this section complains about —
-  one year, unscoped, unrevocable — which is now the stated reason the write
-  tools are registered only when a request carries its own bearer.
+  one year, unscoped, unrevocable — which is why a device-flow token cannot
+  write. That was briefly enforced by registering the write tools only when a
+  request carried its own bearer; removed 2026-09-23, because it made
+  `tools/list` depend on an HTTP header. The Studio's 403 enforces it instead.
 - **Scopes.** This document assumes `booths:read` is the whole vocabulary.
   `booths:write` arrived later; see [`write-tools-plan.md`](write-tools-plan.md)
   for what it covers and §5.6 there for the part of that plan the code
