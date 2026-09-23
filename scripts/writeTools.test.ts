@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../src/mcp/server.js";
+import { AUTH_REQUIRED_TOOLS, requiresAuth } from "../src/mcp/toolAuth.js";
 import { SessionTokens } from "../src/auth/tokenStore.js";
 import { buildCreateFilter } from "../src/tools/createFilter.js";
 import { buildDuplicateProject } from "../src/tools/duplicateProject.js";
@@ -17,7 +18,7 @@ import type { Config } from "../src/config.js";
 import type { StudioClient } from "../src/studio/client.js";
 
 /**
- * The two tools that change something, and the gate in front of them.
+ * The two tools that change something, and what stands in front of them.
  *
  * Everything here is about a promise made somewhere an operator can read it —
  * the consent screen, the directory listing, the tool annotations. A test that
@@ -60,14 +61,13 @@ function fakeStudio(reply: unknown) {
   return { studio, calls };
 }
 
-/* ------------------------------------------------------------- the gate --- */
+/* -------------------------------------------------------- the inventory --- */
 
-async function toolNames(bearerAuth: boolean): Promise<string[]> {
+async function toolNames(): Promise<string[]> {
   const server = createServer(CONFIG, new SessionTokens(), {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth,
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -78,23 +78,30 @@ async function toolNames(bearerAuth: boolean): Promise<string[]> {
   return listed.tools.map((t) => t.name).sort();
 }
 
-test("the write tools exist only where a revocable, scoped token can", async () => {
-  const withBearer = await toolNames(true);
-  assert.ok(withBearer.includes("create_filter"));
-  assert.ok(withBearer.includes("duplicate_project"));
+test("the write tools are listed on a connection carrying no credential at all", async () => {
+  // They used to be registered only where an `Authorization` header was, which
+  // made `tools/list` answer 10 tools with no header and 22 with any string as
+  // one. The ChatGPT submission portal scans from the browser with no
+  // credential, so it could only ever see the 10 while the submission declared
+  // all 22.
+  const listed = await toolNames();
+  assert.ok(listed.includes("create_filter"));
+  assert.ok(listed.includes("duplicate_project"));
+  // The read tools were never conditional, and still are not.
+  assert.ok(listed.includes("list_projects"));
+  assert.ok(listed.includes("search_docs"));
 });
 
-test("no bearer, no write tools — a device-flow session cannot reach them", async () => {
-  // stdio and device-flow HTTP sessions land here. Their token lives a year,
-  // carries no scope and cannot be revoked, which is the whole reason writing
-  // was put behind OAuth. A model connected that way must not be able to
-  // promise something that would fail.
-  const anonymous = await toolNames(false);
-  assert.ok(!anonymous.includes("create_filter"));
-  assert.ok(!anonymous.includes("duplicate_project"));
-  // The read tools are untouched by the gate.
-  assert.ok(anonymous.includes("list_projects"));
-  assert.ok(anonymous.includes("search_docs"));
+test("a write tool called without a token is refused, not hidden", () => {
+  // What replaces the old gate, and improves on it: hiding the tool answered
+  // "unknown tool", which starts no sign-in and explains nothing. Listing it
+  // and refusing the call answers 401 with the WWW-Authenticate challenge that
+  // begins the OAuth flow.
+  for (const name of ["create_filter", "duplicate_project"]) {
+    assert.ok(AUTH_REQUIRED_TOOLS.has(name), name);
+    const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
+    assert.equal(requiresAuth(call), true, name);
+  }
 });
 
 test("the write tools do not claim to be read-only", async () => {
@@ -102,7 +109,6 @@ test("the write tools do not claim to be read-only", async () => {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });

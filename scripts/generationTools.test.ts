@@ -94,14 +94,13 @@ const drained = async () => {
   for (let i = 0; i < 10; i++) await settled();
 };
 
-/* ------------------------------------------------------------- the gate --- */
+/* -------------------------------------------------------- the inventory --- */
 
-async function toolNames(bearerAuth: boolean, config: Config = CONFIG): Promise<string[]> {
+async function toolNames(config: Config = CONFIG): Promise<string[]> {
   const server = createServer(config, new SessionTokens(), {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth,
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -112,21 +111,21 @@ async function toolNames(bearerAuth: boolean, config: Config = CONFIG): Promise<
   return listed.tools.map((t) => t.name);
 }
 
-test("the frame tools live on the OAuth path only", async () => {
-  const withBearer = await toolNames(true);
-  for (const name of FRAME_TOOLS) assert.ok(withBearer.includes(name), name);
-
-  // A device-flow token is a year long, unscoped and unrevocable. Generating
-  // spends the operator's daily allowance, so it belongs behind the credential
-  // that expires and can be revoked, like every other write here.
-  const anonymous = await toolNames(false);
-  for (const name of FRAME_TOOLS) assert.ok(!anonymous.includes(name), name);
+test("the frame tools are listed with no credential present", async () => {
+  // A device-flow token is a year long, unscoped and unrevocable, and
+  // generating spends the operator's daily allowance — so it must not be able
+  // to generate. That is still true; the Studio is what enforces it, with a
+  // 403 naming the fix. Hiding the tools enforced a coarser version of the
+  // same rule and made the tool list depend on an HTTP header.
+  const listed = await toolNames();
+  for (const name of FRAME_TOOLS) assert.ok(listed.includes(name), name);
 });
 
 test("all four are listed as needing auth, so a call without one starts a sign-in", () => {
-  // They are registered only when a bearer is present, so without this a call
-  // would come back "unknown tool" — which tells the client nothing and starts
-  // no OAuth flow.
+  // The tools are advertised to everyone, so this list is the only thing
+  // standing between an uncredentialled call and the Studio. Without it the
+  // call would reach the Studio tokenless and come back "not connected", which
+  // reads as a failure and starts no OAuth flow.
   for (const name of FRAME_TOOLS) {
     assert.ok(AUTH_REQUIRED_TOOLS.has(name), name);
     const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } };
@@ -139,7 +138,6 @@ test("start, refine and save create; check_generation does not", async () => {
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -176,7 +174,6 @@ test("start, refine and save create; check_generation does not", async () => {
       transport: "http",
       sessionId: () => undefined,
       stateless: true,
-      bearerAuth: true,
     });
     const [c2, s2] = InMemoryTransport.createLinkedPair();
     const cl = new Client({ name: "test", version: "0" });
@@ -570,7 +567,6 @@ test("every frame-tool result satisfies the published output schema", async () =
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });

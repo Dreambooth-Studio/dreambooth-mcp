@@ -44,7 +44,6 @@ async function withStudio(body: unknown, run: (call: (name: string, args?: Recor
     transport: "http",
     sessionId: () => undefined,
     stateless: true,
-    bearerAuth: true,
   });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
