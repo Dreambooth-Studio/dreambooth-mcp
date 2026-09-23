@@ -237,7 +237,7 @@ const EDITS_DRAFT = {
  * reintroduce what the note above the write tools exists to prevent. Every
  * caller is shown the same inventory; a compile-time constant keeps that true.
  */
-export const BOOTH_TOOLS_LIVE = false;
+export const BOOTH_TOOLS_LIVE = true;
 
 
 export function createServer(

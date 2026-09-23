@@ -29,25 +29,24 @@ const SCALE = 2;
 const PAD = 6;       // breathing room so the card never touches the edge
 
 /**
- * One card per thing the app can make, which as of 2026-09-23 is two.
+ * One card per thing the app can make: four, and four is the portal's cap.
  *
  * The loading skeletons and the dark variants are deliberately not here: the
  * guidelines ask for screenshots that represent the functionality, and a
  * spinner over an empty placeholder represents the waiting, not the feature.
  *
- * The booth cards are commented out rather than deleted. `BOOTH_TOOLS_LIVE` in
- * src/mcp/server.ts is false while the Studio's `digital_mode` flag is off, so
- * `start_booth` is not registered and a card showing a booth draft is a picture
- * of a feature a reviewer cannot reach - the one thing the guidelines are
- * explicit about. Uncomment both when the flag ships, renumber, and re-run the
- * capture: `04-booth-created` has never been built at all, because no capture
- * run has ever got as far as `create_booth`.
+ * The booth cards were out between 2026-09-23 morning and afternoon, while
+ * `digital_mode` was off and a card showing a booth draft would have been a
+ * picture of a feature a reviewer could not reach. They are back, and
+ * `04-booth-created` exists for the first time: the 2026-09-23 run is the first
+ * that ever got `create_booth` to complete (37 checks, 0 failures, a real booth
+ * at dreambooth.app/gardengold-2).
  */
 const PICKS = [
-  // ["01-booth-draft", "booth-draft-light"],
-  ["01-frame-preview", "frame-preview-light"],
-  ["02-filter-preview", "filter-preview-light"],
-  // ["04-booth-created", "booth-created-light"],
+  ["01-booth-draft", "booth-draft-light"],
+  ["02-frame-preview", "frame-preview-light"],
+  ["03-filter-preview", "filter-preview-light"],
+  ["04-booth-created", "booth-created-light"],
 ];
 
 const ROUTES = {
