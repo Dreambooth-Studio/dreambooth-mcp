@@ -210,14 +210,25 @@ test("booth tools create; preview_filter and check_generation do not", async () 
     const tool = listed.tools.find((t) => t.name === "get_booth_draft");
     assert.equal(tool?.annotations?.readOnlyHint, true);
   }
-  // Editing a draft changes it (not read-only) but replaces nothing published
-  // (not destructive), and the same edit twice leaves the same draft. It does
-  // reach the operator's account on the Studio, so it is open-world by the
-  // plugin guidelines' definition of the hint — see the note in server.ts.
+  // Starting a draft and creating a booth only add. Refining a draft and
+  // editing it overwrite what the draft held, with no earlier version kept,
+  // which is what destructiveHint asks about; the 2026-10-06 portal scan held
+  // both on that. See REPLACES_DRAFT in server.ts.
+  for (const name of ["start_booth", "create_booth"]) {
+    const tool = listed.tools.find((t) => t.name === name);
+    assert.equal(tool?.annotations?.destructiveHint, false, name);
+  }
+  {
+    const tool = listed.tools.find((t) => t.name === "refine_booth");
+    assert.equal(tool?.annotations?.destructiveHint, true);
+  }
+  // The same edit twice leaves the same draft, unlike a redraw. It reaches
+  // the operator's account on the Studio, so it is open-world by the plugin
+  // guidelines' definition of the hint — see the note in server.ts.
   {
     const tool = listed.tools.find((t) => t.name === "update_booth_draft");
     assert.equal(tool?.annotations?.readOnlyHint, false);
-    assert.equal(tool?.annotations?.destructiveHint, false);
+    assert.equal(tool?.annotations?.destructiveHint, true);
     assert.equal(tool?.annotations?.idempotentHint, true);
     assert.equal(tool?.annotations?.openWorldHint, true);
   }
