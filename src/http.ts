@@ -118,13 +118,13 @@ async function handleStateless(
   // The 401 that starts the OAuth flow. Only tool calls that genuinely need a
   // credential are refused — `initialize`, `tools/list` and `search_docs` still
   // answer anonymously, which is what keeps the listing's promise that product
-  // and pricing questions need no account.
+  // and hardware questions need no account.
   if (
     !token &&
     requiresAuth(req.body)
   ) {
     sendUnauthorized(res, config, req, {
-      description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,
+      description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, hardware and troubleshooting questions work without one via search_docs.`,
       id: requestId(req.body),
     });
     return;
@@ -416,7 +416,7 @@ export function startHttpServer(config: Config): void {
         requiresAuth(req.body)
       ) {
         sendUnauthorized(res, config, req, {
-          description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, pricing and troubleshooting questions work without one via search_docs.`,
+          description: `${toolCallName(req.body)} needs a connected Dreambooth account. Sign in to continue; product, hardware and troubleshooting questions work without one via search_docs.`,
           id: requestId(req.body),
         });
         return;

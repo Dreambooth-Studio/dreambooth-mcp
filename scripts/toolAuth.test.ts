@@ -29,7 +29,7 @@ test("requiresAuth: true for every tool that talks to the Studio", () => {
 });
 
 test("requiresAuth: false for the tools that must answer anonymously", () => {
-  // search_docs is the listing's promise that pricing and hardware questions
+  // search_docs is the listing's promise that product and hardware questions
   // need no account. connect_account gating on a credential would be a loop.
   for (const name of ["search_docs", "connect_account", "connection_status", "session_info"]) {
     assert.equal(requiresAuth(call(name)), false, `${name} must not require auth`);
