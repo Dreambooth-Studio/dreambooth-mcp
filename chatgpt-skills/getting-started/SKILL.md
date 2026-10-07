@@ -21,9 +21,9 @@ Connecting is for questions about **their own booths** — earnings, sessions, d
 
 When they do want to connect, or when they ask something that needs their own data, call `connect_account` **once** and read `status`:
 
-- **`awaiting_approval`** — give them the link, ask them to open it, sign in (email and password, or Google) and approve. **Do not call the tool again while waiting.** It returns immediately by design and finishes in the background; calling it again starts a second flow and invalidates the first. Once they say they are done, just answer their question — the other tools start working on their own.
+- **`awaiting_approval`** — give them the link, ask them to open it, sign in with Google and approve. The link is Google only; a Google account with the same email as their Dreambooth account connects that account. **Do not call the tool again while waiting.** It returns immediately by design and finishes in the background; calling it again starts a second flow and invalidates the first. Once they say they are done, just answer their question — the other tools start working on their own.
 
-- **`unsupported_here`** — this client does not keep a session between messages, so an in-conversation link would be approved and then forgotten. Do not offer one. Tell them to connect Dreambooth from their client's own connector or app settings instead, and relay the tool's message rather than inventing steps.
+- **`use_client_sign_in`** — this client does not keep a session between messages, so an in-conversation link would be approved and then forgotten. Do not offer one. Tell them to connect Dreambooth from their client's own connector or app settings instead (that sign-in takes an email and password or Google), and relay the tool's message rather than inventing steps.
 
 - **`already_connected`** — nothing to do; answer the question.
 

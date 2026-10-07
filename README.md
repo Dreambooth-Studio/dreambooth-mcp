@@ -100,7 +100,11 @@ than crashing — that failure path is part of what the checks verify.
 
 **There is no token to configure, in either transport.** The operator asks their
 assistant to connect; `connect_account` starts the device flow the Studio
-already runs for the Electron booth and returns a Google link for them to open.
+already runs for the Electron booth and returns a Google link for them to open
+(Google only: the Studio builds an `accounts.google.com` URL). A client that
+signs in through its own connector settings (a request with no session and no
+credential) gets `use_client_sign_in` and no link instead; that sign-in is the
+Studio's login page, which takes an email and password as well as Google.
 The tool returns immediately and polls in the background — a tool call that
 blocks for minutes reads as a hung server to every MCP client, and by the time
 they ask their next question the token is in place.

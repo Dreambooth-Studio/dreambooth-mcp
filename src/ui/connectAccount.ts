@@ -9,7 +9,8 @@ import { brandMark, widgetDocument } from "./shell.js";
  * question and see whether it worked.
  *
  * Four states, driven by `connection_status`:
- *   idle       nothing started, show the button
+ *   idle       nothing started, show the button; or, when the tool answered
+ *              use_client_sign_in, point at the client's own sign-in
  *   waiting    link opened, poll and count up
  *   connected  green, name the account, stop polling
  *   expired    the 5-minute state died, offer a retry
@@ -38,6 +39,7 @@ const SCRIPT = `
       title: "Hubungkan akun Dreambooth",
       sub: "Setujui lewat Google untuk melihat data booth Anda di sini.",
       cta: "Hubungkan dengan Google",
+      clientSignIn: "Hubungkan Dreambooth dari pengaturan aplikasi atau konektor ini. Anda akan diminta masuk di sana, lalu ulangi pertanyaan Anda.",
       note: "Belum punya akun? Menyetujui otomatis membuatkannya, lengkap dengan uji coba Pro 14 hari.",
       waiting: "Menunggu persetujuan di browser",
       reopen: "Buka lagi",
@@ -53,6 +55,7 @@ const SCRIPT = `
       title: "Connect your Dreambooth account",
       sub: "Approve with Google to see your booth data here.",
       cta: "Continue with Google",
+      clientSignIn: "Connect Dreambooth from this app's or connector's settings. You will be asked to sign in there; then ask your question again.",
       note: "No account yet? Approving creates one, with a 14-day Pro trial.",
       waiting: "Waiting for approval in your browser",
       reopen: "Open again",
@@ -68,6 +71,7 @@ const SCRIPT = `
       title: "Conecta tu cuenta de Dreambooth",
       sub: "Aprueba con Google para ver los datos de tus cabinas aqui.",
       cta: "Continuar con Google",
+      clientSignIn: "Conecta Dreambooth desde la configuracion de esta app o conector. Ahi se te pedira iniciar sesion; despues vuelve a hacer tu pregunta.",
       note: "Aun no tienes cuenta? Al aprobar se crea una, con 14 dias de prueba Pro.",
       waiting: "Esperando aprobacion en tu navegador",
       reopen: "Abrir de nuevo",
@@ -178,6 +182,18 @@ const SCRIPT = `
           db.fit();
         }
       });
+      db.fit();
+      return;
+    }
+
+    // No link is coming on this path, so "run connect_account again" would
+    // only send the model round the same loop. Point at the client's own
+    // sign-in instead; it prompts by itself once a tool needs an account.
+    if (out.status === "use_client_sign_in") {
+      el.innerHTML =
+        '<p class="db-title">' + esc(t.title) + '</p>' +
+        '<p class="db-sub">' + esc(t.clientSignIn) + '</p>' +
+        '<p class="db-note">' + esc(t.note) + '</p>';
       db.fit();
       return;
     }
