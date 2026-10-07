@@ -40,7 +40,7 @@ export function buildConnectAccount(
   return {
     name: "connect_account",
     config: {
-      title: "Connect or create a Dreambooth account",
+      title: "Connect a Dreambooth account",
       // One sentence per answer, because which one a caller gets depends on
       // the client, not on anything the model passes. A client that signs in
       // through its own connector settings (a request with no session and no
@@ -54,13 +54,20 @@ export function buildConnectAccount(
       // exchange links a Google account to a password account with the same
       // email, and creates the account otherwise. The client's own sign-in is
       // the Studio's login page, which takes an email and password too.
+      //
+      // No trial, plan or upgrade is named anywhere this tool speaks. The
+      // plugin guidelines say a plugin "must not display subscription plans,
+      // initiate new subscriptions, or promote upgrades", and the portal held
+      // this tool for review while its description said "a new Dreambooth
+      // account comes with a 14-day Pro trial". That a new account is created
+      // stays, said plainly, because it is what happens.
       description:
-        "Connect this conversation to a Dreambooth Studio account, or create one. The answer's status says what happened. " +
+        "Connect this conversation to the person's Dreambooth Studio account. The answer's status says what happened. " +
         "already_connected: an account is connected; nothing to do. " +
         "awaiting_approval: it returns a link the person opens in their own browser to sign in with Google and approve. A Google account with the same email as an existing Dreambooth account connects that account. Ask them to open it and say when they are done; do not call this tool again while waiting. " +
         "use_client_sign_in: this client connects accounts through its own app or connector settings, where they can sign in with an email and password or with Google, so no link is returned. Ask them to connect Dreambooth there (the client also asks by itself when a tool needs an account), then repeat their question. " +
-        "Either way, a new Dreambooth account comes with a 14-day Pro trial. " +
-        "Call this when another tool reports that no account is connected, or when someone asks to connect, sign up, or switch accounts.",
+        "Either way, someone who has no Dreambooth account yet gets one when they sign in. " +
+        "Call this when another tool reports that no account is connected, or when someone asks to connect or switch accounts.",
       inputSchema: {},
       outputSchema: connectAccountOutput,
     },
@@ -78,7 +85,7 @@ export function buildConnectAccount(
         return {
           status: "use_client_sign_in",
           message:
-            "This client signs in through its own connector settings rather than through a link in the conversation, and it will prompt automatically the next time an account is needed — ask them to connect Dreambooth there and then repeat their question. Approving creates an account with a 14-day Pro trial if they do not have one. Product, pricing and troubleshooting questions need no account at all: use search_docs.",
+            "This client signs in through its own connector settings rather than through a link in the conversation, and it will prompt automatically the next time an account is needed — ask them to connect Dreambooth there and then repeat their question. Signing in creates an account if they do not have one. Product, hardware and troubleshooting questions need no account at all: use search_docs.",
         };
       }
 
@@ -102,7 +109,7 @@ export function buildConnectAccount(
         // Said explicitly because the model otherwise tends to poll by calling
         // the tool again, which starts a second flow and invalidates the first.
         message:
-          "Give them this link to open in their browser: they sign in with Google, then approve. A Google account with the same email as their Dreambooth account connects that account; if they do not have a Dreambooth account yet, approving creates one with a 14-day Pro trial. Do not call this tool again while waiting — once they have approved, the other tools simply start working.",
+          "Give them this link to open in their browser: they sign in with Google, then approve. A Google account with the same email as their Dreambooth account connects that account; if they do not have a Dreambooth account yet, approving creates one. Do not call this tool again while waiting — once they have approved, the other tools simply start working.",
         expiresInMinutes: 5,
         createsAccountIfNeeded: true,
       };

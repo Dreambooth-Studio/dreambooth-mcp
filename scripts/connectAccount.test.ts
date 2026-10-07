@@ -60,3 +60,43 @@ test("the card has its own state for use_client_sign_in instead of 'run connect_
   assert.match(connectAccountWidgetHtml, /out\.status === "use_client_sign_in"/);
   assert.match(connectAccountWidgetHtml, /clientSignIn/);
 });
+
+test("connect_account names no trial or upgrade, in any answer or on its card", async () => {
+  // The plugin guidelines: a plugin "must not display subscription plans,
+  // initiate new subscriptions, or promote upgrades". Every one of these
+  // places said "14-day Pro trial" while the portal held the tool for review.
+  // The id and es card copy are checked too ("uji coba", "prueba"). Word
+  // boundaries, because the es card's "Aprueba" (approve) contains "prueba".
+  const PROMO = /\btrials?\b|\bupgrades?\b|\buji coba\b|\bprueba\b/i;
+
+  // awaiting_approval needs the device flow, so answer its two Studio calls:
+  // the authorize POST hands out a link, and the first status poll ends the
+  // background loop (its timers are unref'd either way).
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) =>
+    new Response(
+      JSON.stringify(
+        String(url).includes("/authorize")
+          ? { state: "s", oauthUrl: "https://accounts.google.com/o/oauth2/v2/auth?x=1" }
+          : { status: "expired" },
+      ),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )) as typeof fetch;
+  let awaiting: Record<string, unknown>;
+  try {
+    awaiting = (await buildConnectAccount(CONFIG, new SessionTokens()).handler()) as Record<string, unknown>;
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(awaiting.status, "awaiting_approval");
+
+  const tool = buildConnectAccount(CONFIG, new SessionTokens(), STATELESS);
+  const answers = [
+    awaiting,
+    await tool.handler(),
+    await buildConnectAccount(CONFIG, SessionTokens.forRequest("tok"), STATELESS).handler(),
+  ];
+  for (const text of [tool.config.title, tool.config.description, ...answers.map((a) => JSON.stringify(a)), connectAccountWidgetHtml]) {
+    assert.doesNotMatch(text, PROMO);
+  }
+});
