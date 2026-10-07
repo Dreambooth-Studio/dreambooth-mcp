@@ -23,23 +23,28 @@ def no_dash(s):
              .replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"'))
 
 # ------------------------------------------------------------------ app info
-DESCRIPTION = """Dreambooth Studio runs self-service photobooths, the kind you find at weddings, events and malls. This app answers questions about them in chat.
+# The plugin guidelines: "Do not advertise pricing, subscriptions, free trials,
+# discounts, or promotions." The 2026-10-07 metadata check held the old copy
+# on exactly that ("how the plans are priced, what each print costs"), and
+# could not confirm the category because the copy opened on the software
+# rather than on who it is for. So: purpose first, no prices, no plans.
+DESCRIPTION = """Dreambooth Studio runs self-service photobooths, the kind you find at weddings, events and malls. This plugin helps the people who operate them run their photobooth business from chat.
 
-Thinking of starting one? Ask what hardware you need, which cameras and printers work, how the plans are priced, what each print costs in paper and ribbon, or how payments and payouts work. Answers come from the Dreambooth documentation, and none of it needs an account.
-
-Already running booths? Connect your account and ask how a booth did last weekend, what you earned this month and how much of it was cash, whether a booth is online right now, how many AI credits are left, or how much media a booth has produced. A sentence back, instead of opening the dashboard.
+Connect your Dreambooth account and ask how a booth did last weekend, what you earned this month and how much of it was cash, whether a booth is online right now, how many AI credits are left, or how much media a booth has produced. A sentence back, instead of opening the dashboard.
 
 It can make four things for you: a photo filter you preview before it is created, a photo frame designed from a description and refined in conversation, a whole booth designed from a description, adjusted in conversation and created at its own link, and a copy of a booth you already run. Everything else it only reads. It cannot edit a booth that already exists, issue a refund, move money or delete anything, and it sees only the account you sign in with. Your booths, never another operator's.
 
-When a figure leaves something out it says so. Cash and voucher income never reaches the wallet ledger, so income is reported from the sessions themselves rather than handed to you as a partial total."""
+Thinking of starting a photobooth business? Ask what hardware you need, which cameras and printers work, how printing works, or how guest payments and payouts are handled. Answers come from the Dreambooth documentation, and none of it needs an account.
+
+When a figure leaves something out it says so. Some income, such as cash taken at the booth, never reaches the wallet ledger, so income is reported from the sessions themselves rather than handed to you as a partial total."""
 
 APP_INFO = {
     "display_name": "Dreambooth Studio",
     "subtitle": "Start and run a photobooth",          # 26 chars, limit 30
     "description": no_dash(DESCRIPTION),
-    # The import enum has no ANALYTICS; PRODUCTIVITY is what the draft already
-    # leads with (BUSINESS is the other honest fit).
-    "category": "PRODUCTIVITY",
+    # The old import enum. The plugin ZIP names its own category,
+    # "Business & Operations" (see build_plugin_zip.py).
+    "category": "BUSINESS",
 }
 
 # ------------------------------------------------------------ annotations

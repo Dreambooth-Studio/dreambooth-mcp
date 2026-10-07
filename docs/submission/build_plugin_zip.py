@@ -31,7 +31,14 @@ NAME = "app-6a7afe588ab08191833eda9ff7fd59a1"
 # What the ZIP and its staging folder are called on disk.
 FILE_STEM = "dreambooth-studio"
 # Above both the 1.0.0 the new portal shows and the v2.0.0 the old form took.
-VERSION = "2.1.0"
+# Bump for every upload: each one is its own package version.
+VERSION = "2.1.1"
+# One of the portal's fixed list: Productivity, Creativity, Developer Tools,
+# Business & Operations, Data & Analytics, Communication, Education &
+# Research, Security, Finance, Healthcare, Travel, Entertainment, Other.
+# "Productivity" could not be confirmed against the listing (2026-10-07);
+# operators running a photobooth business is Business & Operations.
+CATEGORY = "Business & Operations"
 # The server the portal has connected. Changing it needs OpenAI support.
 MCP_SERVER = "dreambooth"
 MCP_URL = "https://mcp.dreamboothstudio.com/mcp"
@@ -52,7 +59,7 @@ STARTER_PROMPTS = [
 ]
 
 CAPABILITIES = [
-    "Answer product, hardware and pricing questions",
+    "Answer product, hardware and setup questions",
     "Read booth sessions, revenue, credits and device status",
     "Create filters, frames and booths, and copy a booth",
 ]
@@ -181,7 +188,7 @@ manifest = {
                 "shortDescription": app["subtitle"],
                 "longDescription": app["description"],
                 "developerName": "Dreambooth",
-                "category": "Productivity",
+                "category": CATEGORY,
                 "capabilities": CAPABILITIES,
                 **URLS,
                 "defaultPrompt": STARTER_PROMPTS,
