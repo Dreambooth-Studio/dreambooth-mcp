@@ -49,4 +49,4 @@ It reads. It cannot move money, request or cancel a withdrawal, issue a refund, 
 
 ## If nothing is connected
 
-Any of these tools will say no account is connected. Do not guess a number, and do not describe a booth's earnings from memory. Run `connect_account`, give them the link, and answer once they have approved.
+Any of these tools will say no account is connected. Do not guess a number, and do not describe a booth's earnings from memory. Run `connect_account` and follow its `status`: give them the link when it returns one (`awaiting_approval`), or ask them to connect Dreambooth from this app's own settings when it says `use_client_sign_in`. Answer once they are connected.

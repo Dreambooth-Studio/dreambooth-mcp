@@ -49,3 +49,7 @@ chatgpt-skills/*.zip
 # rebuilt from docs/submission/build_submission_import.py.
 chatgpt-app-submission.json
 dreambooth-studio-*.json
+
+# The plugin ZIP and its staging folder, rebuilt by
+# docs/submission/build_plugin_zip.py.
+dist-plugin/
