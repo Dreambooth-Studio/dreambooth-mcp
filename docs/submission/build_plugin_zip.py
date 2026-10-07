@@ -32,7 +32,7 @@ NAME = "app-6a7afe588ab08191833eda9ff7fd59a1"
 FILE_STEM = "dreambooth-studio"
 # Above both the 1.0.0 the new portal shows and the v2.0.0 the old form took.
 # Bump for every upload: each one is its own package version.
-VERSION = "2.1.1"
+VERSION = "2.1.2"
 # One of the portal's fixed list: Productivity, Creativity, Developer Tools,
 # Business & Operations, Data & Analytics, Communication, Education &
 # Research, Security, Finance, Healthcare, Travel, Entertainment, Other.

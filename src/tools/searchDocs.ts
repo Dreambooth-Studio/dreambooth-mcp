@@ -60,6 +60,35 @@ interface DocsIndex {
 /** Cached per locale for the process lifetime — the index only changes on deploy. */
 const cache = new Map<string, DocPage[]>();
 
+/**
+ * Pages whose subject is Dreambooth's own plans, prices and billing come back
+ * as a title and a link, never as an excerpt.
+ *
+ * The plugin guidelines say a plugin "must not display subscription plans,
+ * initiate new subscriptions, or promote upgrades", and that it may "link to
+ * an informational page describing available plans". An excerpt of the
+ * pricing page IS a displayed plan list, so the model gets the page to link
+ * instead. Matched by href, which the en and id indexes share.
+ *
+ * Deliberately narrow: pages that mention a plan in passing keep their
+ * excerpt, and the checkout packages an operator sells to guests at a booth
+ * are the operator's prices, not Dreambooth's plans. Pages that explain a
+ * feature depends on the plan (vouchers, email reports) stay too; the
+ * guidelines allow explaining that. The getting-started FAQ is here because
+ * the excerpt is its first 500 characters, which are its free-trial answer.
+ */
+export const LINK_ONLY_PAGES = new Set([
+  "/docs/account/pricing-and-plans",
+  "/docs/account/payments-and-currency",
+  "/docs/account/subscription-billing",
+  "/docs/faq/account-billing-faq",
+  "/docs/faq/getting-started-faq",
+  "/docs/getting-started/first-session-no-install",
+]);
+
+export const LINK_ONLY_EXCERPT =
+  "This page covers Dreambooth's own plans and billing. Share the link; do not quote its prices, plans or trials in the conversation.";
+
 function score(page: DocPage, terms: string[]): number {
   const title = page.title.toLowerCase();
   const keywords = (page.keywords || "").toLowerCase();
@@ -83,7 +112,7 @@ export function buildSearchDocs(studio: StudioClient) {
     config: {
       title: "Search Dreambooth documentation",
       description:
-        "Search the Dreambooth Studio documentation and FAQ. Call this before answering any question about the product, pricing, packages, hardware, printing, subscriptions, or troubleshooting — answer from the docs rather than from memory. Works without a connected account.",
+        "Search the Dreambooth Studio documentation and FAQ. Call this before answering any question about the product, hardware, printing, booth setup, guest payments, or troubleshooting — answer from the docs rather than from memory. Pages about Dreambooth's own plans and billing come back as a link only: share the link, and do not quote prices, plans or trials in the conversation. Works without a connected account.",
       inputSchema: searchDocsInput,
       outputSchema: searchDocsOutput,
     },
@@ -111,8 +140,11 @@ export function buildSearchDocs(studio: StudioClient) {
           title: hit.page.title,
           href: hit.page.href,
           // A window, not the whole page: the model needs enough to answer or
-          // to decide to open the link, not 3 KB of prose per hit.
-          excerpt: (hit.page.content || "").slice(0, 500),
+          // to decide to open the link, not 3 KB of prose per hit. None at
+          // all for a plans page; see LINK_ONLY_PAGES.
+          excerpt: LINK_ONLY_PAGES.has(hit.page.href)
+            ? LINK_ONLY_EXCERPT
+            : (hit.page.content || "").slice(0, 500),
         }));
 
       return { locale, query: args.query, resultCount: hits.length, results: hits };
