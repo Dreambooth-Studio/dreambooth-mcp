@@ -306,7 +306,7 @@ export function createServer(
     title: "Connect Dreambooth account",
     html: connectAccountWidgetHtml,
     description:
-      "A card with a Google sign-in button that reports when the operator has finished approving. Shown instead of pasting the raw link.",
+      "A card with a Google sign-in button that reports when the operator has finished approving. Shown instead of pasting the raw link. When the client signs in through its own settings instead, it says so and shows no button.",
   });
 
   // Not read-only: it changes what this session can see, so clients should

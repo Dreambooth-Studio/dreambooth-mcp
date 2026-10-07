@@ -59,6 +59,13 @@ const SCENARIOS: Scenario[] = [
     toolOutput: { status: "already_connected", email: "budi@tokofoto.id" },
   },
   {
+    file: "connect-client-sign-in-light.html",
+    label: `${CONNECT_WIDGET_URI} — client signs in itself, light`,
+    html: connectAccountWidgetHtml,
+    theme: "light",
+    toolOutput: { status: "use_client_sign_in" },
+  },
+  {
     file: "connect-waiting-light.html",
     label: `${CONNECT_WIDGET_URI} — waiting, light`,
     html: connectAccountWidgetHtml,
