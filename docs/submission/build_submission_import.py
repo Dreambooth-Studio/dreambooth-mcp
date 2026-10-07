@@ -460,16 +460,20 @@ except ImportError:
 if problems:
     print("PROBLEMS:"); [print(" -", p) for p in problems]; sys.exit(1)
 
-with io.open(OUT, "w", encoding="utf-8", newline="\n") as f:
-    json.dump(doc, f, indent=2, ensure_ascii=False)
-    f.write("\n")
-print("wrote", OUT)
-dl = os.path.join(os.path.expanduser("~"), "Downloads")
-if os.path.isdir(dl) and os.path.abspath(os.path.dirname(OUT)) != os.path.abspath(dl):
-    import shutil
-    shutil.copy(OUT, os.path.join(dl, "chatgpt-app-submission.json"))
-    print("copied to", os.path.join(dl, "chatgpt-app-submission.json"))
-print(f"tools: {len(tools)} | positive: {len(doc['test_cases'])} | negative: {len(doc['negative_test_cases'])}")
-print(f"subtitle {len(ai['subtitle'])} chars | description {len(ai['description'])} chars")
-longest = max(((n, f, len(v)) for n, t in tools.items() for f, v in t['justifications'].items()), key=lambda x: x[2])
-print("longest justification:", longest)
+# Everything above builds and checks `doc`; only a direct run writes it.
+# build_plugin_zip.py loads this file for the same listing copy and test
+# cases, and must not drop an old-format import into ~/Downloads as it does.
+if __name__ == "__main__":
+    with io.open(OUT, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(doc, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    print("wrote", OUT)
+    dl = os.path.join(os.path.expanduser("~"), "Downloads")
+    if os.path.isdir(dl) and os.path.abspath(os.path.dirname(OUT)) != os.path.abspath(dl):
+        import shutil
+        shutil.copy(OUT, os.path.join(dl, "chatgpt-app-submission.json"))
+        print("copied to", os.path.join(dl, "chatgpt-app-submission.json"))
+    print(f"tools: {len(tools)} | positive: {len(doc['test_cases'])} | negative: {len(doc['negative_test_cases'])}")
+    print(f"subtitle {len(ai['subtitle'])} chars | description {len(ai['description'])} chars")
+    longest = max(((n, f, len(v)) for n, t in tools.items() for f, v in t['justifications'].items()), key=lambda x: x[2])
+    print("longest justification:", longest)
