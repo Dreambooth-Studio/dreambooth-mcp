@@ -171,11 +171,13 @@ const GRANTS_ACCESS = {
 } as const;
 
 /**
- * The write tools. Every claim here is checkable, which is the point.
+ * The write tools that ADD. Every claim here is checkable, which is the point.
  *
- * `destructiveHint: false` is true and load-bearing: every one of them only
- * ever adds a row. Nothing they can do overwrites or removes anything,
- * because the Studio never opened a PUT or a DELETE to this connection.
+ * `destructiveHint: false` is true and load-bearing for these: each one only
+ * ever adds a row (a filter, a generation in a thread, a frame, a draft, a
+ * booth, a copy). None of them overwrites or removes anything that already
+ * exists. The two tools that change a draft in place are NOT here; see
+ * REPLACES_DRAFT below.
  *
  * `idempotentHint: false` is the uncomfortable one, and it is stated rather
  * than hidden: calling create_filter twice makes two filters. A client that
@@ -190,16 +192,38 @@ const CREATES = {
 } as const;
 
 /**
- * update_booth_draft: not read-only (it changes a draft), not destructive
- * (the draft is not a booth, and the edit replaces nothing an operator has
- * published), idempotent (the same edit twice leaves the same draft — unlike
- * the creates above), and closed-world like everything here.
+ * `refine_booth` and `update_booth_draft` change a booth draft IN PLACE, so
+ * they are destructive by the spec's own test: `false` means "performs only
+ * additive updates", and neither of them is additive.
+ *
+ *   refine_booth        a redraw writes the new image over the draft's old
+ *                       one (`draft.assets.*` in /api/onboarding/generate);
+ *                       what='everything' replaces the whole spec
+ *   update_booth_draft  `$set`s the draft's spec and overrides
+ *                       (PATCH /api/onboarding/draft); frameIds and filterIds
+ *                       replace the lists, an empty aiEffectTitle removes one
+ *
+ * The draft keeps no earlier version, and no tool or screen puts the old
+ * design or the old settings back. These used to say `false` on a narrower
+ * test ("the draft is not a booth, nothing published is replaced"), which is
+ * a different question from the one the hint asks. The 2026-10-06 portal
+ * scan held both tools on exactly that gap, and it was right. Saying `true`
+ * is also what makes a client confirm before a redraw spends one of the
+ * draft's five.
+ *
+ * They differ only on `idempotentHint`: every redraw is a new image and spends
+ * an allowance, while the same settings edit twice leaves the same draft.
  */
-const EDITS_DRAFT = {
+const REPLACES_DRAFT = {
   readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: true,
+  destructiveHint: true,
+  idempotentHint: false,
   openWorldHint: true,
+} as const;
+
+const EDITS_DRAFT = {
+  ...REPLACES_DRAFT,
+  idempotentHint: true,
 } as const;
 
 /**
@@ -600,7 +624,7 @@ export function createServer(
     server.registerTool(
       refineBooth.name,
       withWidget(
-        { ...refineBooth.config, annotations: CREATES },
+        { ...refineBooth.config, annotations: REPLACES_DRAFT },
         GENERATION_WIDGET_URI,
         { invoking: "Mengubah rancangan…", invoked: "Sedang mengubah rancangan" },
       ),

@@ -33,9 +33,10 @@ Also required: a `title` on every tool, and `outputSchema` on every tool for Cha
 The portal asks you to explain each value **per tool**. Write from what the tool actually does. Ten identical sentences teach a reviewer nothing and invite scrutiny.
 
 - **Read Only: True** — name the single read it performs and the mutations it cannot do.
-- **Read Only: False** — say exactly what state changes, and why that is not destructive.
+- **Read Only: False** — say exactly what state changes, and whether that change only adds or also overwrites.
 - **Open World: False** — name the one host and endpoint. If identity is resolved server-side from a token rather than passed as an argument, say so: it makes "cannot reach another account" structural rather than a promise.
-- **Destructive: False** — list the specific verbs it cannot perform (cancel, refund, delete, deactivate), not a generic "it is safe".
+- **Destructive: False** — list the specific verbs it cannot perform (cancel, refund, delete, deactivate), not a generic "it is safe". Only claim it for a tool that ADDS. The spec's test is "false = performs only additive updates", so a tool that overwrites anything in place with no earlier version kept is destructive, even when what it overwrites is a draft nobody has published. `refine_booth` and `update_booth_draft` claimed false on the "nothing published" argument and the 2026-10-06 scan held both.
+- **Destructive: True** — say what is overwritten, that no earlier version is kept, and where the damage stops (e.g. "limited to that draft; no existing booth is touched").
 
 The strongest argument is architectural. If the upstream API accepts the connector's credential **only on `GET`** and requires a browser session for writes, then a write is impossible even from a future tool that tried. Verify that before claiming it, and scope the claim to the routes it is true of.
 

@@ -44,7 +44,7 @@ APP_INFO = {
 
 # ------------------------------------------------------------ annotations
 # Mirrors src/mcp/server.ts: READ_ONLY / READ_ONLY_LOCAL / GRANTS_ACCESS /
-# CREATES. All four hints are stated on every tool: the v2.0.0 review rejected
+# CREATES / REPLACES_DRAFT / EDITS_DRAFT. All four hints are stated on every tool: the v2.0.0 review rejected
 # the submission for hints that were absent rather than false, and a missing key
 # reads as null in the portal. openWorldHint now follows the plugin guidelines'
 # test (does it touch an external system, account or public platform?) rather
@@ -54,6 +54,11 @@ READ_ONLY       = {"readOnlyHint": True,  "destructiveHint": False, "idempotentH
 READ_ONLY_LOCAL = {"readOnlyHint": True,  "destructiveHint": False, "idempotentHint": True,  "openWorldHint": False}
 GRANTS_ACCESS   = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True}
 CREATES         = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True}
+# Overwrite a booth draft in place with no earlier version kept: destructive by
+# the spec's test ("false = only additive updates"). The 2026-10-06 scan held
+# both tools when they said false.
+REPLACES_DRAFT  = {"readOnlyHint": False, "destructiveHint": True,  "idempotentHint": False, "openWorldHint": True}
+EDITS_DRAFT     = {"readOnlyHint": False, "destructiveHint": True,  "idempotentHint": True,  "openWorldHint": True}
 
 ANN = {
     "connect_account": GRANTS_ACCESS,
@@ -74,11 +79,10 @@ ANN = {
     "save_frame": CREATES,
     "preview_filter": READ_ONLY,
     "start_booth": CREATES,
-    "refine_booth": CREATES,
+    "refine_booth": REPLACES_DRAFT,
     "create_booth": CREATES,
     "get_booth_draft": READ_ONLY,
-    # Edits an uncreated draft: not read-only, not destructive, idempotent.
-    "update_booth_draft": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+    "update_booth_draft": EDITS_DRAFT,
 }
 
 # ----------------------------------------------------------- justifications
@@ -178,7 +182,7 @@ J = {
   },
   "refine_booth": {
     "read_only_justification": "Not read-only: it redraws part of a draft the operator owns, or rebuilds it from a new description. It changes only that uncreated draft, never a created booth.",
-    "destructive_justification": "A redraw replaces an image inside a draft the operator asked to change; it cannot touch any booth that exists, and the Studio caps a draft at 5 redraws and 3 rebuilds.",
+    "destructive_justification": "Destructive: a redraw overwrites the draft's current image and a rebuild replaces its whole design; no earlier version is kept. Limited to that draft; no existing booth is touched.",
     "open_world_justification": "Open world: it redraws part of a draft on the operator's Dreambooth account, an external service. The draft must belong to the token's operator; no userId or email argument.",
   },
   "get_booth_draft": {
@@ -188,7 +192,7 @@ J = {
   },
   "update_booth_draft": {
     "read_only_justification": "Not read-only: it changes settings of a booth DRAFT the operator owns (title, button text, colours, photo count, frames, filters) before it is created. A created booth is never touched.",
-    "destructive_justification": "It edits a draft that is not yet a booth; nothing published is overwritten or deleted, and a draft expires in 7 days anyway. The same edit twice leaves the same draft (idempotent).",
+    "destructive_justification": "Destructive: an edit overwrites the draft's previous values (frame and filter lists are replaced); no earlier version is kept. Limited to that draft; no existing booth is touched.",
     "open_world_justification": "Open world: it edits a draft on the operator's Dreambooth account, an external service. Nothing is published by it; the draft must belong to the token's operator, no userId argument.",
   },
   "create_booth": {
