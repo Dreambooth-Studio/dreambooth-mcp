@@ -29,7 +29,7 @@ When they do want to connect, or when they ask something that needs their own da
 
 Never present a sign-in link that the tool did not give you.
 
-If someone has no Dreambooth account, approving still works: it creates one, with a 14-day Pro trial. Say that when it is relevant, but do not push it on someone who only asked a product question.
+If someone has no Dreambooth account, approving still works: it creates one. Do not advertise plans, trials or upgrades, and do not push signing up on someone who only asked a product question.
 
 ## Tone
 

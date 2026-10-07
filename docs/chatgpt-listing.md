@@ -48,23 +48,17 @@ it, none of them factual:
 It also promised sign-in "without leaving the conversation", which was false on
 mobile until the OAuth work in §6.
 
-Replacement (1,414 chars — the portal's cap on this field has never been
-measured; the version it accepted was 1,146, so trim the closing paragraph
-first if it rejects this one):
+Replacement (1,445 chars; the plugin portal's cap on this field is 4,000):
 
 ```
 Dreambooth Studio runs self-service photobooths, the kind you find at
-weddings, events and malls. This app answers questions about them in chat.
+weddings, events and malls. This plugin helps the people who operate them
+run their photobooth business from chat.
 
-Thinking of starting one? Ask what hardware you need, which cameras and
-printers work, how the plans are priced, what each print costs in paper
-and ribbon, or how payments and payouts work. Answers come from the
-Dreambooth documentation, and none of it needs an account.
-
-Already running booths? Connect your account and ask how a booth did last
-weekend, what you earned this month and how much of it was cash, whether a
-booth is online right now, how many AI credits are left, or how much media
-a booth has produced. A sentence back, instead of opening the dashboard.
+Connect your Dreambooth account and ask how a booth did last weekend, what
+you earned this month and how much of it was cash, whether a booth is
+online right now, how many AI credits are left, or how much media a booth
+has produced. A sentence back, instead of opening the dashboard.
 
 It can make four things for you: a photo filter you preview before it is
 created, a photo frame designed from a description and refined in
@@ -74,23 +68,39 @@ already run. Everything else it only reads. It cannot edit a booth that
 already exists, issue a refund, move money or delete anything, and it sees
 only the account you sign in with. Your booths, never another operator's.
 
-When a figure leaves something out it says so. Cash and voucher income
-never reaches the wallet ledger, so income is reported from the sessions
-themselves rather than handed to you as a partial total.
+Thinking of starting a photobooth business? Ask what hardware you need,
+which cameras and printers work, how printing works, or how guest payments
+and payouts are handled. Answers come from the Dreambooth documentation,
+and none of it needs an account.
+
+When a figure leaves something out it says so. Some income, such as cash
+taken at the booth, never reaches the wallet ledger, so income is reported
+from the sessions themselves rather than handed to you as a partial total.
 ```
+
+**Rewritten 2026-10-07 for the plugin portal**, whose metadata check held the
+previous copy twice: "Remove pricing, subscription offers, and temporary
+promotions from the description" (it said *how the plans are priced, what each
+print costs in paper and ribbon*), and "We couldn't confirm the selected
+category ... make sure the listing clearly explains the plugin's main
+purpose" (it opened on the software, not on who it is for). The plugin
+guidelines are explicit: *"Do not advertise pricing, subscriptions, free
+trials, discounts, or promotions."* So the operators come first, and the
+pre-account paragraph keeps hardware, printing and payments but no prices.
 
 No em dashes, on purpose: the rejected draft had four, and they are among the
 louder tells of machine-written copy in a field being judged on quality.
 
-**Two audiences, on purpose.** An earlier draft addressed existing operators
-only, which undersold the connector as an acquisition channel and is not what
-the code does. Paragraph 2 is factual, not marketing: `search_docs` genuinely
-requires no account and its own description names pricing, packages and
-hardware, and the trial claim is `connect_account`'s own wording — *"approving
-creates one, with a 14-day Pro trial"*.
+**Two audiences, operators first.** An earlier draft addressed existing
+operators only, which undersold the connector and is not what the code does:
+`search_docs` genuinely requires no account. The pre-account paragraph stays,
+after the operator paragraphs, and names no prices, plans or trials.
 
-**Categories:** Productivity, Analytics
-*(second choice if only one is allowed: Productivity)*
+**Category:** Business & Operations. The plugin portal takes one, from a fixed
+list (Productivity, Creativity, Developer Tools, Business & Operations, Data &
+Analytics, Communication, Education & Research, Security, Finance, Healthcare,
+Travel, Entertainment, Other); "Productivity" could not be confirmed against
+the listing.
 
 ### URLs
 

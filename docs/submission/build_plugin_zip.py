@@ -23,10 +23,22 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 listing = runpy.run_path(os.path.join(HERE, "build_submission_import.py"), run_name="listing")
 doc, no_dash = listing["doc"], listing["no_dash"]
 
-# Permanent once published (docs/chatgpt-listing.md §2).
-NAME = "dreambooth-studio"
+# The plugin identity the portal already holds for Dreambooth Studio, minted
+# when it was created through the old submission form. The upload refuses any
+# other value: "Plugin name must match the existing plugin". The listing's
+# public slug is a separate thing and stays dreambooth-studio.
+NAME = "app-6a7afe588ab08191833eda9ff7fd59a1"
+# What the ZIP and its staging folder are called on disk.
+FILE_STEM = "dreambooth-studio"
 # Above both the 1.0.0 the new portal shows and the v2.0.0 the old form took.
-VERSION = "2.1.0"
+# Bump for every upload: each one is its own package version.
+VERSION = "2.1.1"
+# One of the portal's fixed list: Productivity, Creativity, Developer Tools,
+# Business & Operations, Data & Analytics, Communication, Education &
+# Research, Security, Finance, Healthcare, Travel, Entertainment, Other.
+# "Productivity" could not be confirmed against the listing (2026-10-07);
+# operators running a photobooth business is Business & Operations.
+CATEGORY = "Business & Operations"
 # The server the portal has connected. Changing it needs OpenAI support.
 MCP_SERVER = "dreambooth"
 MCP_URL = "https://mcp.dreamboothstudio.com/mcp"
@@ -47,7 +59,7 @@ STARTER_PROMPTS = [
 ]
 
 CAPABILITIES = [
-    "Answer product, hardware and pricing questions",
+    "Answer product, hardware and setup questions",
     "Read booth sessions, revenue, credits and device status",
     "Create filters, frames and booths, and copy a booth",
 ]
@@ -75,7 +87,7 @@ problems = []
 
 # ------------------------------------------------------------------ staging
 DIST = os.path.join(ROOT, "dist-plugin")
-STAGE = os.path.join(DIST, NAME)
+STAGE = os.path.join(DIST, FILE_STEM)
 shutil.rmtree(DIST, ignore_errors=True)
 os.makedirs(os.path.join(STAGE, "assets"))
 
@@ -176,7 +188,7 @@ manifest = {
                 "shortDescription": app["subtitle"],
                 "longDescription": app["description"],
                 "developerName": "Dreambooth",
-                "category": "Productivity",
+                "category": CATEGORY,
                 "capabilities": CAPABILITIES,
                 **URLS,
                 "defaultPrompt": STARTER_PROMPTS,
@@ -252,12 +264,12 @@ if problems:
     sys.exit(1)
 
 # ---------------------------------------------------------------------- zip
-zip_path = os.path.join(DIST, f"{NAME}-plugin-{VERSION}.zip")
+zip_path = os.path.join(DIST, f"{FILE_STEM}-plugin-{VERSION}.zip")
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
     for src in sorted(glob.glob(os.path.join(STAGE, "**", "*"), recursive=True)):
         if os.path.isfile(src):
             rel = os.path.relpath(src, STAGE).replace(os.sep, "/")
-            z.write(src, f"{NAME}/{rel}" if args.folder else rel)
+            z.write(src, f"{FILE_STEM}/{rel}" if args.folder else rel)
 
 print("wrote", zip_path)
 dl = os.path.join(os.path.expanduser("~"), "Downloads")
