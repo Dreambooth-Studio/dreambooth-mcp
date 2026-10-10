@@ -13,8 +13,19 @@ import type { StudioClient } from "../studio/client.js";
  * surface later on.
  */
 
+/**
+ * Bounds on the one tool anyone can call without an account.
+ *
+ * Scoring is terms × pages × a scan of each page, on the event loop. Unbounded,
+ * a single anonymous call with a few MB of "aa aa aa…" blocked the process for
+ * minutes and stalled every operator's tool calls with it. A real question is
+ * a sentence; these leave plenty of room for one.
+ */
+const MAX_QUERY_LENGTH = 200;
+const MAX_TERMS = 12;
+
 export const searchDocsInput = {
-  query: z.string().min(2).describe("Search terms, in English or Indonesian"),
+  query: z.string().min(2).max(MAX_QUERY_LENGTH).describe("Search terms, in English or Indonesian"),
   locale: z.enum(["en", "id"]).optional().describe("Docs language (default en)"),
   limit: z.number().int().min(1).max(10).optional().describe("Max results (default 5)"),
 };
@@ -58,7 +69,7 @@ interface DocsIndex {
 }
 
 /** Cached per locale for the process lifetime — the index only changes on deploy. */
-const cache = new Map<string, DocPage[]>();
+const cache = new Map<string, IndexedPage[]>();
 
 /**
  * Pages whose subject is Dreambooth's own plans, prices and billing come back
@@ -89,10 +100,17 @@ export const LINK_ONLY_PAGES = new Set([
 export const LINK_ONLY_EXCERPT =
   "This page covers Dreambooth's own plans and billing. Share the link; do not quote its prices, plans or trials in the conversation.";
 
-function score(page: DocPage, terms: string[]): number {
-  const title = page.title.toLowerCase();
-  const keywords = (page.keywords || "").toLowerCase();
-  const content = (page.content || "").toLowerCase();
+/** Lowercased once when the index is cached, not on every term of every call. */
+interface IndexedPage extends DocPage {
+  titleLc: string;
+  keywordsLc: string;
+  contentLc: string;
+}
+
+function score(page: IndexedPage, terms: string[]): number {
+  const title = page.titleLc;
+  const keywords = page.keywordsLc;
+  const content = page.contentLc;
 
   let total = 0;
   for (const term of terms) {
@@ -124,11 +142,20 @@ export function buildSearchDocs(studio: StudioClient) {
         const index = await studio.getPublic<DocsIndex>(
           `/docs-search-index-${locale}.json`
         );
-        pages = index.pages ?? [];
+        pages = (index.pages ?? []).map((page) => ({
+          ...page,
+          titleLc: (page.title || "").toLowerCase(),
+          keywordsLc: (page.keywords || "").toLowerCase(),
+          contentLc: (page.content || "").toLowerCase(),
+        }));
         cache.set(locale, pages);
       }
 
-      const terms = args.query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
+      // Deduplicated and capped as well as length-limited: the schema bounds
+      // the string, this bounds the work, and stays true if either changes.
+      const terms = [
+        ...new Set(args.query.toLowerCase().split(/\s+/).filter((t) => t.length > 1)),
+      ].slice(0, MAX_TERMS);
       const limit = args.limit ?? 5;
 
       const hits = pages

@@ -94,7 +94,8 @@ const SCRIPT = `
   var POLL_MS = 2000;
 
   var out = db.toolOutput();
-  var authUrl = out.authUrl || null;
+  // https only: it is opened and rendered as an href below.
+  var authUrl = out.authUrl && String(out.authUrl).indexOf("https://") === 0 ? out.authUrl : null;
   var saved = db.getState();
 
   // Declared before the restore below, which reads it: a hoisted var would be

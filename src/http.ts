@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -38,6 +38,22 @@ interface SessionEntry {
  * fifteen seconds.
  */
 const SESSION_IDLE_MS = 30 * 60 * 1000;
+
+/**
+ * Ceiling on live sessions. Any anonymous `initialize` creates one, with a full
+ * server behind it, for thirty idle minutes — so without a cap, memory is
+ * whatever a loop of initialize calls says it is. Well above real traffic.
+ */
+const MAX_SESSIONS = 2000;
+
+/**
+ * What the logs get instead of a session id. On the session path the id alone
+ * reaches that session's connected account, so a raw id in Railway logs is a
+ * credential in Railway logs. A short hash still correlates open/close lines.
+ */
+function logId(id: string | undefined): string | undefined {
+  return id ? createHash("sha256").update(id).digest("hex").slice(0, 12) : id;
+}
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 /** `Authorization: Bearer <token>`, or null. Scheme match is case-insensitive. */
@@ -363,7 +379,9 @@ export function startHttpServer(config: Config): void {
    */
   registerWellKnown(app, config);
 
-  app.use(express.json({ limit: "4mb" }));
+  // Every tool input is a few short strings. 4mb was room for a single request
+  // to carry megabytes of work into an anonymous tool; this is still generous.
+  app.use(express.json({ limit: "512kb" }));
 
   /**
    * A body this parser rejects must come back as JSON-RPC, not as HTML.
@@ -458,6 +476,15 @@ export function startHttpServer(config: Config): void {
       return;
     }
 
+    if (sessions.size >= MAX_SESSIONS) {
+      res.status(503).set("Retry-After", "60").json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Server busy. Try again shortly." },
+        id: null,
+      });
+      return;
+    }
+
     // A session starts unauthenticated and stays that way until its own
     // operator completes connect_account. There is no configuration that can
     // change that.
@@ -476,11 +503,11 @@ export function startHttpServer(config: Config): void {
           createdAt: now,
           lastSeenAt: now,
         });
-        console.log(JSON.stringify({ msg: "session opened", sessionId: id }));
+        console.log(JSON.stringify({ msg: "session opened", sessionId: logId(id) }));
       },
       onsessionclosed: (id) => {
         sessions.delete(id);
-        console.log(JSON.stringify({ msg: "session closed", sessionId: id }));
+        console.log(JSON.stringify({ msg: "session closed", sessionId: logId(id) }));
       },
     });
 
@@ -516,7 +543,7 @@ export function startHttpServer(config: Config): void {
       console.log(
         JSON.stringify({
           msg: "session evicted (idle)",
-          sessionId: id,
+          sessionId: logId(id),
           idleMinutes: Math.round((Date.now() - entry.lastSeenAt) / 60000),
         }),
       );

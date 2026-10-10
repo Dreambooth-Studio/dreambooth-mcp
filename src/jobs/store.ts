@@ -62,6 +62,13 @@ const MAX_RUNTIME_MS = 3 * 60 * 1000;
  */
 const MAX_IN_FLIGHT_PER_OWNER = 3;
 
+/**
+ * Across all owners. The per-owner limit is keyed by a hash of whatever bearer
+ * string arrived, so a caller inventing a fresh one per request is a fresh
+ * owner each time; this is the bound that does not depend on the caller.
+ */
+const MAX_IN_FLIGHT_TOTAL = 200;
+
 export type JobState = "running" | "done" | "failed";
 
 /**
@@ -190,6 +197,14 @@ export class JobStore {
     const inFlight = [...this.jobs.values()].filter(
       (j) => j.ownerKey === ownerKey && j.state === "running"
     ).length;
+    let running = 0;
+    for (const j of this.jobs.values()) if (j.state === "running") running++;
+    if (running >= MAX_IN_FLIGHT_TOTAL) {
+      throw new JobLimitError(
+        "Dreambooth is busy with other generations right now. Try again in a minute."
+      );
+    }
+
     if (inFlight >= MAX_IN_FLIGHT_PER_OWNER) {
       throw new JobLimitError(
         inFlight +

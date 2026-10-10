@@ -100,7 +100,23 @@ export function buildConnectAccount(
         };
       }
 
+      // One flow per session at a time. Each call starts a Studio state and a
+      // five-minute poller, so repeated calls were an easy way to fan load out
+      // onto the Studio; it also invalidated the link already handed out.
+      const pending = tokens.pendingLink();
+      if (pending) {
+        return {
+          status: "awaiting_approval",
+          authUrl: pending,
+          message:
+            "A sign-in link is already waiting for approval. Give them this same link; do not call this tool again while waiting.",
+          expiresInMinutes: 5,
+          createsAccountIfNeeded: true,
+        };
+      }
+
       const { authUrl, state } = await startDeviceFlow(config);
+      tokens.setPendingLink(authUrl);
       pollDeviceFlowInBackground(config, tokens, state);
 
       return {
