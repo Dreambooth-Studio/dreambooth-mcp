@@ -70,3 +70,20 @@ test("the description invites no pricing or subscription questions", () => {
   assert.doesNotMatch(description, /\bpricing\b|\bsubscriptions?\b|\bpackages\b/i);
   assert.match(description, /link only/);
 });
+
+/**
+ * search_docs is anonymous, so its cost must be bounded by the server, not by
+ * the caller. A multi-megabyte query of short terms used to block the event
+ * loop for minutes.
+ */
+test("search_docs bounds the query it will score", async () => {
+  const { searchDocsInput } = await import("../src/tools/searchDocs.js");
+  assert.equal(searchDocsInput.query.safeParse("a".repeat(201)).success, false);
+  assert.equal(searchDocsInput.query.safeParse("printer ribbon").success, true);
+
+  // Even past the schema, a flood of terms scores in bounded time.
+  const tool = buildSearchDocs(studio);
+  const started = Date.now();
+  await tool.handler({ query: "aa ".repeat(200_000) });
+  assert.ok(Date.now() - started < 1000);
+});

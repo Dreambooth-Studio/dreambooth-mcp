@@ -68,7 +68,9 @@ const SCRIPT = `
   }
 
   function link(url) {
-    if (!url) return "";
+    // https only, as in the generation card: an href is the one place a
+    // javascript: value would execute rather than display.
+    if (!url || String(url).indexOf("https://") !== 0) return "";
     return '<p class="db-note"><a class="db-link" href="' + esc(url) + '" target="_blank" rel="noopener">' +
       esc(t.open) + ' &rarr;</a></p>';
   }
