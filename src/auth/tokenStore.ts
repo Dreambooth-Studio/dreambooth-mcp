@@ -22,6 +22,8 @@ export class SessionTokens {
   /** Device-flow state we are still waiting on, if any. */
   private pendingState: string | null = null;
   private pendingSince: number | null = null;
+  /** The link handed out for the pending flow, so a repeat call reuses it. */
+  private pendingUrl: string | null = null;
   private lastError: string | null = null;
 
   // No seed-token constructor on purpose. A session becomes authenticated only
@@ -67,6 +69,15 @@ export class SessionTokens {
   clear(): void {
     this.token = null;
     this.email = null;
+  }
+
+  setPendingLink(url: string): void {
+    this.pendingUrl = url;
+  }
+
+  /** The link for a flow that is still waiting, or null. */
+  pendingLink(): string | null {
+    return this.pendingState ? this.pendingUrl : null;
   }
 
   startPending(state: string): void {

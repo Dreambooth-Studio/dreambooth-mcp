@@ -132,6 +132,11 @@ export async function sendFramePrompt(
   threadId: string,
   prompt: string
 ): Promise<{ generationId: string; imageUrl?: string }> {
+  // encodeURIComponent leaves "." alone, so a threadId of ".." would climb out
+  // of /threads/. Model-supplied, so held to the shape a real id has.
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(threadId)) {
+    throw new Error("That threadId is not valid. Use the one check_generation returned.");
+  }
   const reply = await studio.post<MessagesReply>(
     `/api/ai/threads/${encodeURIComponent(threadId)}/messages`,
     // generationRequestId is the Studio's idempotency key for this turn; the
