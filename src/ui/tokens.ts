@@ -105,18 +105,18 @@ body{
   line-height:1.5;
   -webkit-font-smoothing:antialiased;
 }
+/* The host draws the border, because the widget asks for one with
+   prefersBorder. A border and a width cap of our own put a smaller box inside
+   that frame, with an empty panel beside it. */
 .db-card{
   background:var(--db-surface);
-  border:1px solid var(--db-border);
   border-radius:.5rem;
-  box-shadow:0 1px 2px 0 rgb(0 0 0 / .05);
   padding:1.25rem;
-  max-width:520px;
 }
 .db-brand{display:flex;align-items:center;gap:.5rem;margin-bottom:1rem}
 .db-brand span{font-weight:600;font-size:.875rem;letter-spacing:-.01em}
 .db-title{font-size:1rem;font-weight:600;margin:0 0 .25rem}
-.db-sub{font-size:.8125rem;color:var(--db-ink-muted);margin:0}
+.db-sub{font-size:.8125rem;color:var(--db-ink-muted);margin:0;max-width:65ch}
 .db-label{display:block;font-size:.75rem;font-weight:500;color:var(--db-ink-muted);margin-bottom:.25rem}
 .db-input{
   width:100%;
@@ -146,7 +146,7 @@ body{
 .db-btn:hover:not(:disabled){background:var(--db-primary-fill-hover)}
 .db-btn:focus-visible{outline:2px solid var(--db-primary);outline-offset:2px}
 .db-btn:disabled{opacity:.4;cursor:not-allowed}
-.db-btn--block{width:100%}
+.db-btn--block{width:100%;max-width:22rem}
 .db-btn--ghost{background:transparent;color:var(--db-primary-text);border:1px solid var(--db-border-strong)}
 .db-btn--ghost:hover:not(:disabled){background:var(--db-primary-subtle)}
 .db-chip{
@@ -161,7 +161,7 @@ body{
 }
 .db-chip:hover{background:var(--db-surface-hover)}
 .db-chip[aria-pressed="true"]{background:var(--db-primary-subtle);border-color:var(--db-primary);color:var(--db-primary-text)}
-.db-note{font-size:.75rem;color:var(--db-ink-muted);margin:.75rem 0 0}
+.db-note{font-size:.75rem;color:var(--db-ink-muted);margin:.75rem 0 0;max-width:65ch}
 .db-status{display:flex;align-items:center;gap:.5rem;font-size:.875rem}
 .db-status--ok{color:var(--db-success);font-weight:500}
 .db-status--warn{color:var(--db-warning)}
@@ -178,6 +178,6 @@ body{
 .db-link{color:var(--db-primary-text);text-decoration:none;font-size:.75rem}
 .db-link:hover{text-decoration:underline}
 .db-card--link{cursor:pointer}
-.db-card--link:hover{border-color:var(--db-border-strong)}
-.db-card--link:focus-visible{outline:2px solid var(--db-primary-text);outline-offset:2px}
+.db-card--link:hover{background:var(--db-surface-hover)}
+.db-card--link:focus-visible{outline:2px solid var(--db-primary-text);outline-offset:-2px}
 `;

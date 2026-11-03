@@ -87,12 +87,13 @@ const SCRIPT = `
       working: "Sedang dikerjakan…",
       failed: "Tidak jadi dibuat",
       unknown: "Tidak ditemukan",
-      untracked: "Pekerjaan ini sudah tidak dipantau di sini — hasilnya ada di percakapan.",
-      notSaved: "Belum disimpan — minta diubah, atau minta disimpan ke daftar frame.",
+      runningNote: "Belum ada yang dibuat sampai proses ini selesai.",
+      untracked: "Pekerjaan ini sudah tidak dipantau di sini. Hasilnya ada di percakapan.",
+      notSaved: "Belum disimpan. Minta diubah, atau minta disimpan ke daftar frame.",
       photos: "foto",
-      imageFailed: "Gambar tidak bisa ditampilkan di sini; tautannya ada di jawaban.",
+      imageFailed: "Gambar tidak bisa ditampilkan di sini.",
       draftReady: "Rancangan booth siap",
-      draftNote: "Belum dibuat — minta diubah, atau minta dibuat jadi booth.",
+      draftNote: "Belum dibuat. Minta diubah, atau minta dibuat jadi booth.",
       remaining: "Sisa: {g} desain ulang penuh · {r} gambar ulang",
       boothMade: "Booth dibuat",
       openBooth: "Buka booth",
@@ -104,7 +105,7 @@ const SCRIPT = `
       privateItem: "hanya akun ini",
       publicItem: "bisa dipakai booth mana pun",
       filterPreview: "Pratinjau filter",
-      filterNote: "Belum dibuat — minta disimpan kalau sudah cocok.",
+      filterNote: "Belum dibuat. Minta disimpan kalau sudah cocok.",
       notShown: "Tidak tampak di pratinjau (tetap diterapkan booth):",
       workingOn: "Sedang:",
       setLine: "Diatur:",
@@ -118,12 +119,13 @@ const SCRIPT = `
       working: "Still working…",
       failed: "Nothing was created",
       unknown: "Not found",
-      untracked: "This job is no longer tracked here — its result is in the conversation.",
-      notSaved: "Not saved yet — ask for changes, or ask to save it to the frame list.",
+      runningNote: "Nothing is created until this finishes.",
+      untracked: "This job is no longer tracked here. Its result is in the conversation.",
+      notSaved: "Not saved yet. Ask for changes, or ask to save it to the frame list.",
       photos: "photos",
-      imageFailed: "The image could not be shown here; the link is in the reply.",
+      imageFailed: "The image could not be shown here.",
       draftReady: "Booth draft ready",
-      draftNote: "Not created yet — ask for changes, or ask to create the booth.",
+      draftNote: "Not created yet. Ask for changes, or ask to create the booth.",
       remaining: "Left: {g} full rebuilds · {r} redraws",
       boothMade: "Booth created",
       openBooth: "Open the booth",
@@ -135,7 +137,7 @@ const SCRIPT = `
       privateItem: "private to this account",
       publicItem: "available to any booth",
       filterPreview: "Filter preview",
-      filterNote: "Not created yet — ask to save it once it looks right.",
+      filterNote: "Not created yet. Ask to save it once it looks right.",
       notShown: "Not shown in the preview (the booth still applies them):",
       workingOn: "Now:",
       setLine: "Set:",
@@ -149,10 +151,11 @@ const SCRIPT = `
       working: "Trabajando…",
       failed: "No se creo nada",
       unknown: "No encontrado",
+      runningNote: "No se crea nada hasta que esto termine.",
       untracked: "Este trabajo ya no se sigue aqui; su resultado esta en la conversacion.",
       notSaved: "Aun no guardado: pide cambios, o pide guardarlo en la lista de marcos.",
       photos: "fotos",
-      imageFailed: "La imagen no se pudo mostrar aqui; el enlace esta en la respuesta.",
+      imageFailed: "La imagen no se pudo mostrar aqui.",
       draftReady: "Borrador de cabina listo",
       draftNote: "Aun no creada: pide cambios, o pide crear la cabina.",
       remaining: "Quedan: {g} rediseños completos · {r} redibujos",
@@ -204,8 +207,10 @@ const SCRIPT = `
    */
   function imageTag(url) {
     if (typeof url !== "string" || url.indexOf("https://") !== 0) return "";
-    return '<div class="db-preview" style="margin-top:.75rem;line-height:0">' +
-      '<img src="' + esc(url) + '" alt="" style="max-width:100%;max-height:360px;border-radius:.375rem;border:1px solid var(--db-border)">' +
+    // Centred on a tinted stage, so a portrait image in a wide card reads as a
+    // picture on a surface rather than leaving the rest of the row empty.
+    return '<div class="db-preview" style="margin-top:.75rem;line-height:0;display:flex;justify-content:center;align-items:center;padding:.5rem;border-radius:.375rem;background:var(--db-surface-hover)">' +
+      '<img src="' + esc(url) + '" alt="" style="display:block;max-width:100%;max-height:360px;border-radius:.25rem;border:1px solid var(--db-border)">' +
       '</div>';
   }
 
@@ -292,7 +297,9 @@ const SCRIPT = `
       '<div class="db-live">' + skeleton(out.kind) + '<div>' +
         '<p class="db-title">' + esc(out.what || "") + '</p>' +
         (out.progress ? '<p class="db-sub">' + esc(t.workingOn) + ' ' + esc(out.progress) + '</p>' : '') +
-        (out.note ? '<p class="db-note">' + esc(out.note) + '</p>' : '') +
+        // Not out.note: that is written for the model, in English, and tells it
+        // which tool to call next.
+        '<p class="db-note">' + esc(t.runningNote) + '</p>' +
       '</div></div>';
     db.fit();
   }

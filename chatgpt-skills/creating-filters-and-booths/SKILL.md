@@ -55,8 +55,8 @@ as every system involved is concerned it worked.
 **Preview first, always.** `preview_filter` renders the Studio's sample photo
 through the adjustments and shows it in the chat, for free, and names the
 adjustments a still preview cannot show (shadows, highlights and the like — the
-booth still applies them). Show it, let them react, then create with the same
-adjustments.
+booth still applies them). The card shows the image, so do not add the image or
+its URL to your reply. Let them react, then create with the same adjustments.
 
 **The ranges are in the tool's schema. Read them there rather than guessing.**
 They fall into three groups: some are 0–200 where **100 means unchanged**
@@ -89,7 +89,7 @@ the image model, one version at a time.
 **`start_frame` returns a job id, not a frame.** Say that generating takes about
 a minute, then poll `check_generation` (every 15 seconds or so). When it says
 `done` it carries a preview image, a `threadId` and a `generationId` — a
-preview, not a saved frame. Show it.
+preview, not a saved frame. The card shows it; do not add the image to your reply.
 
 **Changes go through `refine_frame` on the same thread**, one instruction at a
 time ("warmer", "thicker border", "fewer motifs"), and only when the operator

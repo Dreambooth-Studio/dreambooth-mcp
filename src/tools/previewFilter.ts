@@ -1,3 +1,4 @@
+import { CARD_SHOWS_IMAGE } from "./cardNotes.js";
 import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
 import { StudioError } from "../studio/errors.js";
@@ -98,6 +99,7 @@ export function buildPreviewFilter(studio: StudioClient) {
           (reply.sample === "account"
             ? "This is the operator's own preview photo through the booth's filter pipeline. "
             : "This is the Studio's sample photo through the booth's filter pipeline. ") +
+          `${CARD_SHOWS_IMAGE} ` +
           "Nothing has been created — call create_filter with the same adjustments when the operator is happy." +
           (notPreviewed.length
             ? ` Not shown in the preview, though the booth will apply them: ${notPreviewed.join(", ")}.`

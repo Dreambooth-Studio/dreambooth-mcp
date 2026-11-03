@@ -85,7 +85,7 @@ export function buildStartBooth(studio: StudioClient) {
             // A new draft's id is unknown until the reply, so there is nothing
             // to narrate against yet; the elapsed time is the honest signal.
             ctx.progress(
-              "Designing the booth — title, colours, welcome screens and background. Usually 60-120 seconds."
+              "Designing the booth: title, colours, welcome screens and background. Usually 60-120 seconds."
             );
             let reply: BoothDraftReply;
             try {

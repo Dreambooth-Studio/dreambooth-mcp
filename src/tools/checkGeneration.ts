@@ -1,3 +1,4 @@
+import { CARD_SHOWS_IMAGE } from "./cardNotes.js";
 import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
 import type { Config } from "../config.js";
@@ -232,7 +233,7 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
           state: "done",
           draft,
           note:
-            "This is a draft, not a booth: show the operator the welcome preview and the title. " +
+            `This is a draft, not a booth. ${CARD_SHOWS_IMAGE} ` +
             "update_booth_draft changes its title, button text, colours, capture settings, language, frames, filters and AI effect without a redraw; " +
             "refine_booth redraws the welcome or background (redraws are limited per draft); create_booth makes it real — it takes the draft's title and link name unless the operator chose others. " +
             "get_booth_draft reads the draft back later.",
@@ -247,7 +248,7 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
           booth,
           dashboardUrl: booth?.dashboardUrl,
           note: booth
-            ? `The booth now exists at ${booth.boothUrl}. It can be opened in the dashboard to edit; there is no tool that edits or deletes it.`
+            ? `The booth now exists at ${booth.boothUrl}. ${CARD_SHOWS_IMAGE} It can be opened in the dashboard to edit; there is no tool that edits or deletes it.`
             : "The booth was created.",
         };
       }
@@ -267,7 +268,7 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
         // refined and it can be saved, it just cannot be shown here. Saying
         // so beats an empty card the model describes as a picture.
         note: result?.imageUrl
-          ? "This is a preview in the design thread, not a saved frame. Show it to the operator; refine_frame changes it, save_frame keeps it."
+          ? `This is a preview in the design thread, not a saved frame. ${CARD_SHOWS_IMAGE} refine_frame changes it, save_frame keeps it.`
           : "The generation finished but Dreambooth could not give the image a viewable address, so there is nothing to show. It can still be refined with refine_frame or kept with save_frame, and the saved frame will appear in the dashboard.",
       };
     },
