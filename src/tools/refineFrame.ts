@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
 import { jobs, JobLimitError } from "../jobs/store.js";
+import { CHANGE_BRIEF } from "./promptNotes.js";
 import {
   STARTED_NOTE,
   labelFor,
@@ -57,7 +58,8 @@ export function buildRefineFrame(studio: StudioClient) {
           .min(1)
           .max(4000)
           .describe(
-            "What to change, in the operator's words. It is read with the whole thread as context, so 'the same but darker' works; there is no need to repeat the original description."
+            "What to change. It is read with the whole thread as context, so 'the same but darker' works. " +
+              CHANGE_BRIEF
           ),
       },
       outputSchema: refineFrameOutput,

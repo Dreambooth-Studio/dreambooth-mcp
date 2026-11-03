@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FILTER_RESTRAINT } from "./promptNotes.js";
 
 /**
  * The adjustments a filter is made of, as the model may send them.
@@ -46,7 +47,8 @@ export const filterAdjustments = z
     hueRotate: z.number().min(0).max(360).optional().describe("0 = unchanged, in degrees"),
   })
   .describe(
-    "Only include what the operator asked to change. An omitted adjustment keeps its neutral value; sending every field at its neutral value creates a filter that does nothing."
+    "Only include what the operator asked to change. An omitted adjustment keeps its neutral value; sending every field at its neutral value creates a filter that does nothing. " +
+      FILTER_RESTRAINT
   );
 
 export type FilterAdjustmentsInput = z.infer<typeof filterAdjustments>;

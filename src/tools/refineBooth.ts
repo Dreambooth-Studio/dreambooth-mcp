@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
 import { jobs, JobLimitError } from "../jobs/store.js";
 import { labelFor } from "./frameGeneration.js";
+import { BOOTH_BRIEF, CHANGE_BRIEF } from "./promptNotes.js";
 import {
   BOOTH_GENERATE_TIMEOUT_MS,
   BOOTH_JOB_MAX_RUNTIME_MS,
@@ -109,7 +110,10 @@ export function buildRefineBooth(studio: StudioClient) {
           .min(1)
           .max(1000)
           .describe(
-            "For 'welcome' / 'app-background': what to change, in the operator's words, up to 300 characters — the current design is kept and only this is applied. For 'everything': the new full description of the booth, up to 1000 characters."
+            "For 'welcome' / 'app-background': what to change, up to 300 characters — the current design is kept and only this is applied. " +
+              CHANGE_BRIEF +
+              " For 'everything': the new full description of the booth, up to 1000 characters, written the way start_booth's prompt is: " +
+              BOOTH_BRIEF
           ),
         orientation: z
           .enum(["phone", "laptop"])
