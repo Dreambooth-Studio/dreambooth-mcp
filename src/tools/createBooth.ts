@@ -200,7 +200,7 @@ export async function createBoothWork(
 
   // 3. The booth's own frames. Best-effort by the route's own contract: a
   // booth without them is still a booth, and /new ships one too.
-  ctx.progress("Drawing the booth's own three frames — up to five minutes…");
+  ctx.progress("Drawing the booth's own three frames. This can take up to five minutes…");
   let ownFrameCount = 0;
   for (let attempt = 0; attempt <= DRAW_POLL_ATTEMPTS; attempt++) {
     let reply: DraftFramesReply | null = null;

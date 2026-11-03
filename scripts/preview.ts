@@ -341,8 +341,13 @@ window.openai = {
   // here rather than in the widget: the host paints behind the card, so a
   // preview on bare white would hide a card that is invisible in dark mode.
   const pageBg = scenario.theme === "dark" ? "#0F0F0F" : "#F4F4F5";
+  // The frame is what ChatGPT draws around a card that sets prefersBorder.
+  const frame = scenario.theme === "dark" ? "#3A3A3A" : "#D9D9D9";
   return scenario.html
-    .replace("</head>", `<style>body{background:${pageBg};padding:24px}</style>${shim}</head>`);
+    .replace(
+      "</head>",
+      `<style>body{background:${pageBg};padding:24px}.db-card{box-shadow:0 0 0 1px ${frame}}</style>${shim}</head>`
+    );
 }
 
 const outDir = resolve(process.cwd(), ".preview");

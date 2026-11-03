@@ -524,7 +524,7 @@ export function createServer(
     title: "Preview",
     html: generationWidgetHtml,
     description:
-      "A card showing the thing being made and, when it is done, the thing itself: a frame preview, a booth draft, a created booth, a saved frame, a created filter, or a filter preview. While work runs it shows a skeleton and updates itself. A preview is not a saved thing.",
+      "A card showing the thing being made and, when it is done, the thing itself: a frame preview, a booth draft, a created booth, a saved frame, a created filter, or a filter preview. While work runs it shows a skeleton and updates itself. A preview is not a saved thing. The card shows the image itself, so do not add the image or its URL to your reply.",
     csp: { resourceDomains: GENERATION_IMAGE_ORIGINS },
   });
 
