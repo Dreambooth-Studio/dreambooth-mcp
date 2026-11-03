@@ -421,8 +421,10 @@ test("boothErrorFor turns the Studio's refusals into the next step", () => {
   const studio = (status: number, message: string) => new StudioError(message, status, false);
   const s = (e: StudioError) => e.message;
 
-  assert.match(s(boothErrorFor(studio(401, "Sign in to generate your booth."), "generate")), /not deployed yet/);
-  assert.match(s(boothErrorFor(studio(401, "Sign in to save your booth."), "create")), /not deployed yet/);
+  assert.match(s(boothErrorFor(studio(401, "Sign in to generate your booth."), "generate")), /connect it again/);
+  assert.match(s(boothErrorFor(studio(401, "Sign in to save your booth."), "create")), /connect it again/);
+  assert.match(s(boothErrorFor(studio(401, "Sign in to edit your booth draft."), "edit")), /connect it again/);
+  assert.doesNotMatch(s(boothErrorFor(studio(401, "Sign in to generate your booth."), "generate")), /not deployed/);
   assert.match(s(boothErrorFor(studio(404, "Not found"), "generate")), /not enabled/);
   assert.match(s(boothErrorFor(studio(404, "Nothing found at /api/onboarding/generate."), "generate")), /not enabled/);
   assert.match(s(boothErrorFor(studio(404, "Draft not found"), "refine")), /expired|another account/);
@@ -652,7 +654,7 @@ test("the Studio's create refusals come back as the next step", async () => {
   );
   await assert.rejects(
     () => createBoothWork(studio, CONFIG, CREATE_ARGS, ctxOf([]), { pollSleep: noSleep }),
-    (err: unknown) => err instanceof StudioError && /not deployed yet/.test(err.message)
+    (err: unknown) => err instanceof StudioError && /connect it again/.test(err.message)
   );
 });
 

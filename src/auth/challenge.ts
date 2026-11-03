@@ -20,13 +20,26 @@ import { SCOPE_STRING } from "./scopes.js";
  * so that a person who has never heard of Dreambooth can still ask what
  * hardware they need, which is what the directory listing promises.
  */
-export function resourceMetadataUrl(config: Config, req: express.Request): string {
+export function resourceMetadataUrl(config: Config, _req?: express.Request): string {
   const host = config.publicHost;
   // The path-suffixed form, RFC 9728 §3.1: the resource lives at /mcp, so its
   // metadata lives at /.well-known/oauth-protected-resource/mcp. Clients derive
   // this URL themselves and compare, so pointing at the bare path here while
   // they look at the suffixed one is a mismatch that reads as "no metadata".
   return `https://${host}/.well-known/oauth-protected-resource/mcp`;
+}
+
+/**
+ * The challenge for a connection that is valid but cannot create things.
+ *
+ * It goes in a tool result's `_meta["mcp/www_authenticate"]`, because by then the
+ * HTTP status has long been sent. OpenAI documents this as what makes ChatGPT
+ * offer to authorize again, which is how a connection granted read before the
+ * write scope reached it gets a way forward. Nothing here can raise its scope:
+ * the operator has to approve the consent screen.
+ */
+export function insufficientScopeChallenge(config: Config): string {
+  return `Bearer realm="dreambooth", error="insufficient_scope", error_description="Connect again and approve creating things to use this tool.", scope="${SCOPE_STRING}", resource_metadata="${resourceMetadataUrl(config)}"`;
 }
 
 export function sendUnauthorized(
