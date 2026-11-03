@@ -20,6 +20,26 @@ export class StudioError extends Error {
   }
 }
 
+/**
+ * What an operator does about a connection that cannot create things.
+ *
+ * Spelled out because "reconnect and approve permission" sent one to look for a
+ * permission setting inside ChatGPT. There is none: the approval is on the
+ * Dreambooth page that opens when they connect again.
+ */
+export const RECONNECT_TO_CREATE =
+  "Disconnect Dreambooth in this app's settings, connect it again, and approve creating things on the Dreambooth page that opens.";
+
+/**
+ * True when a failure means this connection was never granted `booths:write`.
+ *
+ * Read from the sentence because that is all a finished background job keeps.
+ * "read-only" is the Studio's own wording on its 403.
+ */
+export function needsWritePermission(message: string): boolean {
+  return /\bread-only\b/i.test(message) || message.includes(RECONNECT_TO_CREATE);
+}
+
 export function studioErrorFor(status: number, route: string): StudioError {
   switch (status) {
     case 401:

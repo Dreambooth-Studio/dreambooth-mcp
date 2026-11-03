@@ -4,7 +4,9 @@ import type { Config } from "../config.js";
 import { StudioClient } from "../studio/client.js";
 import type { SessionTokens } from "../auth/tokenStore.js";
 import { buildConnectAccount } from "../tools/connectAccount.js";
-import { StudioError } from "../studio/errors.js";
+import { insufficientScopeChallenge } from "../auth/challenge.js";
+import { needsWritePermission, StudioError } from "../studio/errors.js";
+import { securitySchemesFor } from "./toolSecurity.js";
 import { buildGetSessions } from "../tools/getSessions.js";
 import { buildGetGalleryStats } from "../tools/getGalleryStats.js";
 import { buildSearchDocs } from "../tools/searchDocs.js";
@@ -62,17 +64,27 @@ export const SERVER_VERSION = "0.3.0";
  *
  * The text block is byte-identical to what this function returned before
  * widgets existed, so nothing that works today can regress.
+ *
+ * A refusal for want of `booths:write` also carries the challenge that lets
+ * ChatGPT offer to authorize again. A background job reports that refusal as an
+ * ordinary `check_generation` result, so it is read out of the result as well.
  */
-function safe<A>(handler: (args: A) => Promise<unknown>) {
+function safeResult<A>(config: Config, handler: (args: A) => Promise<unknown>) {
+  const writeChallenge = () => ({
+    "mcp/www_authenticate": [insufficientScopeChallenge(config)],
+  });
   return async (args: A) => {
     try {
       const result = await handler(args);
-      return {
+      const reply = {
         structuredContent: result as Record<string, unknown>,
         content: [
           { type: "text" as const, text: JSON.stringify(result, null, 2) },
         ],
       };
+      return jobNeedsWritePermission(result)
+        ? { ...reply, isError: true, _meta: writeChallenge() }
+        : reply;
     } catch (err) {
       const message =
         err instanceof StudioError
@@ -89,10 +101,22 @@ function safe<A>(handler: (args: A) => Promise<unknown>) {
         _meta: {
           retryable: err instanceof StudioError ? err.retryable : false,
           status: err instanceof StudioError ? err.status : 0,
+          ...(err instanceof StudioError && needsWritePermission(err.message)
+            ? writeChallenge()
+            : {}),
         },
       };
     }
   };
+}
+
+function jobNeedsWritePermission(result: unknown): boolean {
+  const job = result as { state?: unknown; error?: unknown } | null | undefined;
+  return (
+    job?.state === "failed" &&
+    typeof job.error === "string" &&
+    needsWritePermission(job.error)
+  );
 }
 
 /**
@@ -270,6 +294,23 @@ export function createServer(
   session: SessionContext = STDIO_SESSION,
 ): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+  const safe = <A>(handler: (args: A) => Promise<unknown>) => safeResult(config, handler);
+
+  // In one place so a tool added later cannot go out without its auth policy.
+  const registerTool = server.registerTool.bind(server) as (
+    name: string,
+    toolConfig: { _meta?: Record<string, unknown> },
+    callback: unknown,
+  ) => ReturnType<McpServer["registerTool"]>;
+  server.registerTool = ((name, toolConfig, callback) =>
+    registerTool(
+      name,
+      {
+        ...toolConfig,
+        _meta: { ...toolConfig._meta, securitySchemes: securitySchemesFor(name) },
+      },
+      callback,
+    )) as McpServer["registerTool"];
 
   /**
    * Answer `prompts/list` with an empty list instead of "Method not found".

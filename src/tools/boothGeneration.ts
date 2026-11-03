@@ -1,5 +1,5 @@
 import type { StudioClient } from "../studio/client.js";
-import { StudioError } from "../studio/errors.js";
+import { RECONNECT_TO_CREATE, StudioError } from "../studio/errors.js";
 import type { JobContext } from "../jobs/store.js";
 
 /**
@@ -291,10 +291,11 @@ export type BoothStage = "generate" | "refine" | "frames" | "create" | "lookup" 
  *
  * The Studio's own wording is kept wherever it already says that; this adds
  * the next step, because a model reading "Regeneration limit reached" will
- * otherwise guess at one. Two answers are translated outright: the 401 that
- * means the Studio has not been updated to admit the connector here, and the
- * 404 that means the digital-mode feature is off — both read as the
- * operator's fault if relayed raw, and neither is.
+ * otherwise guess at one. Two answers are translated outright: the 401 these
+ * routes give a connection without `booths:write`, or one the Studio no longer
+ * accepts, and the 404 that means the digital-mode feature is off. The 401 says
+ * "sign in" to someone who is signed in, and the fix for both of its causes is
+ * to connect again.
  */
 export function boothErrorFor(err: unknown, stage: BoothStage): StudioError {
   if (!(err instanceof StudioError)) {
@@ -304,9 +305,9 @@ export function boothErrorFor(err: unknown, stage: BoothStage): StudioError {
 
   switch (err.status) {
     case 401:
-      if (/sign in to (generate|save)/i.test(m)) {
+      if (/sign in to (generate|save|edit)/i.test(m)) {
         return new StudioError(
-          "Dreambooth refused this connection for booth generation. That usually means the Studio update that admits the connector here is not deployed yet — the operator can still build the booth at dreambooth.app/new.",
+          `Dreambooth did not accept this connection for creating a booth. ${RECONNECT_TO_CREATE} The operator can also build the booth at dreambooth.app/new.`,
           401,
           false
         );
