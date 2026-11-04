@@ -68,6 +68,12 @@ grey or blown-out filter from a request for a subtle one.
 **Only send what they asked to change.** An omitted adjustment keeps its neutral
 value. Sending every field at neutral creates a filter that does nothing.
 
+**Small moves.** A look is two to five adjustments, each within about 25 of
+neutral, unless they ask for something strong ("high contrast", "black and
+white"). Booth photos are faces under venue light: leave `hueRotate` at 0 unless
+they want a surreal colour shift (it turns skin green), keep `tint` within 15,
+and do not stack vignette, grain, clarity and dehaze to make it "cinematic".
+
 **Name it something they will recognise** in a list of filters — their words if
 they named it, otherwise something descriptive. Never "Untitled".
 
@@ -85,6 +91,22 @@ LUT with adjustments and calling it the same thing.
 
 A frame is designed the way the Studio's Frame Studio does it: a thread with
 the image model, one version at a time.
+
+**Write a brief, not a caption.** The prompt goes to the image model as it is.
+Adjectives like "stunning, elegant, intricate, magical" carry no instruction;
+they pull every frame toward the same glossy, over-decorated look operators
+call AI slop. Keep their specifics exactly (names, colours, motif names) and
+make the rest concrete: one technique, two or three colours, one to three named
+motifs and where they sit, and how dense it is. Add no sparkles, glitter,
+bokeh, glow or glossy 3D they did not ask for.
+
+| They said | Not this | This |
+|---|---|---|
+| *batik emas hangat* | "A stunning, elegant frame with intricate golden batik patterns and a luxurious, warm, magical feel" | "Batik tulis style, kawung pattern in warm gold #C8962E on deep brown #3B2418. Pattern only in a band along the top and bottom; the side margins plain brown. No other ornaments." |
+| *yang lebih rame* (refine) | "Make it more vibrant, festive and eye-catching with lots of beautiful decorations" | "Add small jasmine sprigs in the four corners; keep the kawung bands and colours as they are." |
+
+If it is too vague to fill in, ask one question, or pick one direction and say
+which. A refinement states the change and nothing else.
 
 **`start_frame` returns a job id, not a frame.** Say that generating takes about
 a minute, then poll `check_generation` (every 15 seconds or so). When it says
@@ -114,6 +136,15 @@ ask what /new would ask — the occasion or business, the vibe and colours, and
 the language the booth should speak — and put all of it in the prompt. Each
 `start_booth` is a new draft and spends one of its three full generations, so do
 not call it speculatively or twice for one request.
+
+**Give the Studio facts and art direction, not copy.** It writes the title,
+headline and button text itself, and a prompt that already reads like a
+marketing caption ("an unforgettable, magical experience ✨") comes back as one.
+Give names, ages, dates and places exactly as the operator said them, one
+concrete visual reference ("1970s Indonesian film poster", "hand-painted warung
+sign"), two or three colours and two to four concrete objects or motifs. Write a
+headline only when the operator gave exact wording, and then say it must appear
+as written. No emoji.
 
 **`start_booth` returns a job id, not a booth.** Say designing takes one to three
 minutes; poll `check_generation`. When it says `done` it carries `draft{…}` —

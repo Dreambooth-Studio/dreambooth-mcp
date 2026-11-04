@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
 import { jobs, JobLimitError } from "../jobs/store.js";
 import { StudioError } from "../studio/errors.js";
+import { FRAME_BRIEF } from "./promptNotes.js";
 import {
   FRAME_LAYOUTS,
   FRAME_LAYOUT_KEYS,
@@ -71,7 +72,9 @@ export function buildStartFrame(studio: StudioClient) {
           .min(1)
           .max(4000)
           .describe(
-            "What the frame should look like, in the operator's own words where possible: decoration, colour, mood, occasion. Not the photo slots — those come from the layout. Do not name brands, characters or franchises; the image model refuses them."
+            "What the frame should look like: decoration, colour, occasion. Not the photo slots — those come from the layout. " +
+              FRAME_BRIEF +
+              " Do not name brands, characters or franchises; the image model refuses them."
           ),
         layout: z
           .enum(FRAME_LAYOUT_KEYS)

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
 import { jobs, JobLimitError } from "../jobs/store.js";
 import { labelFor } from "./frameGeneration.js";
+import { BOOTH_BRIEF } from "./promptNotes.js";
 import {
   BOOTH_GENERATE_TIMEOUT_MS,
   BOOTH_JOB_MAX_RUNTIME_MS,
@@ -58,7 +59,9 @@ export function buildStartBooth(studio: StudioClient) {
           .min(3)
           .max(1000)
           .describe(
-            "The booth, in the operator's words plus what you gathered: occasion or business, vibe and style, colours, mood, anything that must appear. Up to 1000 characters. Do not name brands, characters or franchises; the image model refuses them."
+            "The booth, from what the operator said and what you gathered, up to 1000 characters. " +
+              BOOTH_BRIEF +
+              " Do not name brands, characters or franchises; the image model refuses them."
           ),
         language: z
           .string()
