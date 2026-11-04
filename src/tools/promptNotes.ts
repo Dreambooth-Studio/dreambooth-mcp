@@ -16,9 +16,19 @@
  * They are kept short: every tool description is sent on every `tools/list`,
  * in every conversation.
  *
- * Steering words, not content: the operator's own specifics (names, colours,
- * motif names, wording they want printed) always pass through untouched.
+ * Steering words, not content. Each brief starts with what the operator said,
+ * in their own words and language, because that sentence is the creative
+ * intent and everything after it is our interpretation of it: the Studio reads
+ * the prompt as the operator's request (the dashboard thread shows it as their
+ * message), and an interpretation that replaced it would lose the one part
+ * nobody can reconstruct. Their specifics (names, colours, motif names,
+ * wording they want printed) pass through untouched; the brief fills only what
+ * they left open.
  */
+
+/** The opening every first-prompt brief shares. */
+const THEIR_WORDS_FIRST =
+  "Start with what the operator said, in their words and language, then add the brief. Never swap a choice they made for one you prefer; fill only what they left open.";
 
 /** Words that carry no instruction and pull every image toward the same look. */
 const PRAISE_WORDS = "'stunning', 'elegant', 'magical', 'vibrant', 'intricate', 'high quality', '4k'";
@@ -34,7 +44,8 @@ const DEFAULT_EFFECTS = "sparkles, glitter, bokeh, lens flare, glow, glossy 3D";
  * style, an empty canvas is not.
  */
 export const FRAME_BRIEF =
-  "Write a designer's brief, not a caption. Keep the operator's specifics exactly (names, colours, motif names such as kawung or mega mendung, the occasion) and make concrete: " +
+  `${THEIR_WORDS_FIRST} ` +
+  "Write it as a designer's brief, not a caption. Keep their specifics exactly (names, colours, motif names such as kawung or mega mendung, the occasion) and make concrete: " +
   "one technique (e.g. risograph, linocut, screen print, paper cut-out, gouache, batik tulis); " +
   "2-3 colours, named or hex; " +
   "1-3 named motifs and where they sit (top band, corners, along the edge); " +
@@ -49,10 +60,15 @@ export const FRAME_BRIEF =
  * The references are deliberately local and print-based. "Modern and fun" gets
  * the gradient-and-confetti welcome screen; "hand-painted warung sign" gets a
  * design someone could recognise.
+ *
+ * The reference is the calling model's job, not a question for the operator:
+ * most operators have no design vocabulary to answer with, so asking for one
+ * stalls the conversation. It is words, never an image — start_booth takes none.
  */
 export const BOOTH_BRIEF =
+  `${THEIR_WORDS_FIRST} ` +
   "Write facts and art direction, not marketing copy. Include: the occasion or business, with names, ages, dates and places exactly as given; " +
-  "one concrete visual reference (e.g. '1970s Indonesian film poster', 'hand-painted warung sign', 'Swiss minimalist poster'); " +
+  "one visual reference in words — theirs if they gave one, otherwise one you pick from the occasion and name to them (e.g. '1970s Indonesian film poster', 'hand-painted warung sign', 'Swiss minimalist poster'); do not ask them for one; " +
   "2-3 colours; 2-4 concrete objects or motifs (e.g. 'enamel tin mugs', 'pressed jasmine'). " +
   "Do not write the headline or taglines — the Studio writes the copy — unless the operator gave exact wording; then quote it and say it must appear as written. " +
   `No emoji, no praise words (${PRAISE_WORDS}, 'unforgettable'), no ${DEFAULT_EFFECTS} unless asked.`;
@@ -66,7 +82,7 @@ export const BOOTH_BRIEF =
  * moves three things when the operator asked for one.
  */
 export const CHANGE_BRIEF =
-  "State the change and nothing else: what changes, to what, and what to keep if that matters ('background to deep green #1F3B2D, keep the motifs where they are'). " +
+  "State the change and nothing else, starting from the operator's own words: what changes, to what, and what to keep if that matters ('background to deep green #1F3B2D, keep the motifs where they are'). " +
   "Turn a vague word into a concrete change ('more festive' → which colour, motif or density moves). " +
   "Do not restate the original design or add mood or praise words.";
 
