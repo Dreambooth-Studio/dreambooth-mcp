@@ -92,7 +92,10 @@ LUT with adjustments and calling it the same thing.
 A frame is designed the way the Studio's Frame Studio does it: a thread with
 the image model, one version at a time.
 
-**Write a brief, not a caption.** The prompt goes to the image model as it is.
+**Their words first, then a brief, not a caption.** The prompt goes to the
+Studio as it is, and the Studio treats it as the operator's own request. Open
+with what they said, in their words and language — that is the intent — and
+never swap a choice they made for one you prefer.
 Adjectives like "stunning, elegant, intricate, magical" carry no instruction;
 they pull every frame toward the same glossy, over-decorated look operators
 call AI slop. Keep their specifics exactly (names, colours, motif names) and
@@ -102,8 +105,8 @@ bokeh, glow or glossy 3D they did not ask for.
 
 | They said | Not this | This |
 |---|---|---|
-| *batik emas hangat* | "A stunning, elegant frame with intricate golden batik patterns and a luxurious, warm, magical feel" | "Batik tulis style, kawung pattern in warm gold #C8962E on deep brown #3B2418. Pattern only in a band along the top and bottom; the side margins plain brown. No other ornaments." |
-| *yang lebih rame* (refine) | "Make it more vibrant, festive and eye-catching with lots of beautiful decorations" | "Add small jasmine sprigs in the four corners; keep the kawung bands and colours as they are." |
+| *batik emas hangat* | "A stunning, elegant frame with intricate golden batik patterns and a luxurious, warm, magical feel" | "Batik emas hangat. Batik tulis style, kawung pattern in warm gold #C8962E on deep brown #3B2418. Pattern only in a band along the top and bottom; the side margins plain brown. No other ornaments." |
+| *yang lebih rame* (refine) | "Make it more vibrant, festive and eye-catching with lots of beautiful decorations" | "Lebih rame: add small jasmine sprigs in the four corners; keep the kawung bands and colours as they are." |
 
 If it is too vague to fill in, ask one question, or pick one direction and say
 which. A refinement states the change and nothing else.
@@ -140,11 +143,14 @@ not call it speculatively or twice for one request.
 **Give the Studio facts and art direction, not copy.** It writes the title,
 headline and button text itself, and a prompt that already reads like a
 marketing caption ("an unforgettable, magical experience ✨") comes back as one.
-Give names, ages, dates and places exactly as the operator said them, one
-concrete visual reference ("1970s Indonesian film poster", "hand-painted warung
-sign"), two or three colours and two to four concrete objects or motifs. Write a
-headline only when the operator gave exact wording, and then say it must appear
-as written. No emoji.
+Open with what the operator said, in their words. Give names, ages, dates and
+places exactly as they said them, one visual reference in words ("1970s
+Indonesian film poster", "hand-painted warung sign"), two or three colours and
+two to four concrete objects or motifs. The reference is yours to pick when
+they have none — choose one that fits the occasion and name it to them ("I'm
+going for a 70s film-poster look, brick red and cream — OK?") rather than
+asking them for design vocabulary they may not have. Write a headline only when
+the operator gave exact wording, and then say it must appear as written. No emoji.
 
 **`start_booth` returns a job id, not a booth.** Say designing takes one to three
 minutes; poll `check_generation`. When it says `done` it carries `draft{…}` —
