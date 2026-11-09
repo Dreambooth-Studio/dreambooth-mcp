@@ -26,9 +26,18 @@
  * they left open.
  */
 
-/** The opening every first-prompt brief shares. */
+/**
+ * The opening every first-prompt brief shares.
+ *
+ * "Their words" means what they asked for, not the request around it. The
+ * Studio reads quoted wording as text to print, so a brief that opened with
+ * `"Design me a garden romance booth…"` in quotes came back with the welcome
+ * headline "Design me a" (2026-11-09). The wrapper goes; the substance and
+ * the language stay.
+ */
 const THEIR_WORDS_FIRST =
-  "Start with what the operator said, in their words and language, then add the brief. Never swap a choice they made for one you prefer; fill only what they left open.";
+  "Start with what the operator asked for, in their words and language, written as a description rather than a request: drop the wrapper ('design me a', 'make me', 'can you', 'buatkan', 'bikinin', 'tolong') and do not put it in quotation marks — the Studio prints quoted words as they are. " +
+  "Then add the brief. Never swap a choice they made for one you prefer; fill only what they left open.";
 
 /** Words that carry no instruction and pull every image toward the same look. */
 const PRAISE_WORDS = "'stunning', 'elegant', 'magical', 'vibrant', 'intricate', 'high quality', '4k'";
@@ -70,7 +79,7 @@ export const BOOTH_BRIEF =
   "Write facts and art direction, not marketing copy. Include: the occasion or business, with names, ages, dates and places exactly as given; " +
   "one visual reference in words — theirs if they gave one, otherwise one you pick from the occasion and name to them (e.g. '1970s Indonesian film poster', 'hand-painted warung sign', 'Swiss minimalist poster'); do not ask them for one; " +
   "2-3 colours; 2-4 concrete objects or motifs (e.g. 'enamel tin mugs', 'pressed jasmine'). " +
-  "Do not write the headline or taglines — the Studio writes the copy — unless the operator gave exact wording; then quote it and say it must appear as written. " +
+  "Do not write the headline or taglines — the Studio writes the copy — unless the operator gave exact wording to print; then quote only that wording and say it must appear as written. Quotation marks are for nothing else. " +
   `No emoji, no praise words (${PRAISE_WORDS}, 'unforgettable'), no ${DEFAULT_EFFECTS} unless asked.`;
 
 /**
