@@ -93,9 +93,13 @@ const SCRIPT = `
   var CEILING_MS = 5 * 60 * 1000;
   var POLL_MS = 2000;
 
-  var out = db.toolOutput();
   // https only: it is opened and rendered as an href below.
-  var authUrl = out.authUrl && String(out.authUrl).indexOf("https://") === 0 ? out.authUrl : null;
+  function authUrlOf(result) {
+    return result.authUrl && String(result.authUrl).indexOf("https://") === 0 ? result.authUrl : null;
+  }
+
+  var out = db.toolOutput();
+  var authUrl = authUrlOf(out);
   var saved = db.getState();
 
   // Declared before the restore below, which reads it: a hoisted var would be
@@ -132,6 +136,8 @@ const SCRIPT = `
   }
 
   function render() {
+    if (phase === "idle" && db.isWaiting()) { db.showLoading(el); return; }
+
     if (phase === "connected") {
       el.innerHTML =
         '<div class="db-status db-status--ok">' +
@@ -277,6 +283,17 @@ const SCRIPT = `
   // the language the card first loaded in.
   db.onGlobals = function () {
     t = db.t(COPY);
+    render();
+  };
+
+  // The answer can land after the first paint. A card already waiting or
+  // connected has moved past it and only takes the link.
+  db.onToolOutput = function (next) {
+    out = next || {};
+    authUrl = authUrlOf(out);
+    email = out.email || email;
+    if (phase !== "idle") return;
+    if (out.status === "already_connected") phase = "connected";
     render();
   };
 
