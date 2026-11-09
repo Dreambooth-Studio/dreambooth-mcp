@@ -52,6 +52,9 @@ export function registerWidget(server: McpServer, widget: WidgetSpec): void {
   };
 
   const meta: Record<string, unknown> = {
+    // The MCP Apps form. A card that completes the handshake is an MCP App to
+    // the host, and this is where the standard says to look for its CSP.
+    ui: { prefersBorder: true, csp },
     "ui.prefersBorder": true,
     "ui.csp": csp,
     "openai/widgetPrefersBorder": true,

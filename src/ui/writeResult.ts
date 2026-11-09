@@ -116,6 +116,7 @@ const SCRIPT = `
   }
 
   function render() {
+    if (db.isWaiting()) { db.showLoading(el); return; }
     var out = db.toolOutput();
     if (out && out.kind === "booth") { renderBooth(out); return; }
     renderError(out && out.error ? out.error : "");
@@ -127,6 +128,8 @@ const SCRIPT = `
     t = db.t(COPY);
     render();
   };
+
+  db.onToolOutput = function () { render(); };
 
   render();
 })();

@@ -187,6 +187,8 @@ const SCRIPT = `
 
   var t = db.t(COPY);
   var current = db.toolOutput() || {};
+  /** A poll has moved this card past the result the tool first returned. */
+  var advanced = false;
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
@@ -461,6 +463,7 @@ const SCRIPT = `
       db.callTool("check_generation", { jobId: jobId }).then(function (res) {
         pollFailures = 0;
         if (!res || typeof res !== "object" || !res.state) return;
+        advanced = true;
         if (res.state === "running") {
           current = res;
           renderRunning(current);
@@ -483,6 +486,7 @@ const SCRIPT = `
     // Only the three "it now exists" states re-link the card below; everything
     // else (draft, preview, running, failed) must not look clickable.
     db.linkCard(card, null);
+    if (db.isWaiting()) { db.showLoading(el); return; }
     if (!out || !out.kind) { renderError(t.failed, out && out.error ? out.error : ""); return; }
     if (out.kind === "filter-preview") { renderFilterPreview(out); return; }
     if (out.kind === "filter") { renderFilter(out); return; }
@@ -511,6 +515,14 @@ const SCRIPT = `
   // here: this whole script lives inside a template literal.)
   db.onGlobals = function () {
     t = db.t(COPY);
+    render();
+  };
+
+  // The result can land after the first paint, because the host sends it once
+  // the handshake is done. A poll that already moved the card on stays in front.
+  db.onToolOutput = function (out) {
+    if (advanced) return;
+    current = out || {};
     render();
   };
 
