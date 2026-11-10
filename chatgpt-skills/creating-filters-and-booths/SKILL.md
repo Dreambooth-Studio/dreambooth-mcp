@@ -169,8 +169,11 @@ booth is ready".
 - **`refine_booth` redraws** — the welcome screen (phone, laptop or both), the
   in-booth background, or the whole draft from a new description. This is for
   what is *painted*: the headline and subtext of a designed welcome are part of
-  the image, so "change the headline" is a redraw. Redraws are limited (five
-  per draft, three full rebuilds); `check_generation` reports what is left.
+  the image, so "change the headline" is a redraw. For new words on the
+  welcome screen ("put the couple's names on it"), pass `headline` with the
+  exact words and no `orientation`: both screens are repainted with it and the
+  draft keeps the new headline (two redraws). Redraws are limited (five per
+  draft, three full rebuilds); `check_generation` reports what is left.
 - **`update_booth_draft` sets, without a redraw** — the title, the link name,
   the welcome button text, the colours, capture mode, the booth's language,
   which frames and filters it carries, its AI effect, and the page settings the

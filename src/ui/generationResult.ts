@@ -322,6 +322,17 @@ const SCRIPT = `
     db.fit();
   }
 
+  /**
+   * The screen to show: the phone one, unless a redraw changed only the
+   * laptop one. Showing the untouched phone screen after a laptop redraw made
+   * the change look like it had not happened.
+   */
+  function draftImage(d) {
+    var r = Array.isArray(d.regenerated) ? d.regenerated : [];
+    if (r.length === 1 && r[0] === "landscape" && d.welcomeLandscapeUrl) return d.welcomeLandscapeUrl;
+    return d.welcomePortraitUrl || d.welcomeLandscapeUrl;
+  }
+
   function renderDraft(out) {
     var d = out.draft || {};
     var p = d.palette || {};
@@ -346,7 +357,7 @@ const SCRIPT = `
       (facts.length ? '<p class="db-sub">' + esc(facts.join(" · ")) + '</p>' : '') +
       '<p class="db-sub" style="margin-top:.5rem">' + swatch(p.backgroundColor) + swatch(p.primaryColor) + swatch(p.secondaryColor) +
         (d.slug ? '<span style="vertical-align:middle">dreambooth.app/' + esc(d.slug) + '</span>' : '') + '</p>' +
-      imageTag(d.welcomePortraitUrl) +
+      imageTag(draftImage(d)) +
       (mode ? '<p class="db-sub" style="margin-top:.5rem">' + esc(mode) + '</p>' : '') +
       (edited.length ? '<p class="db-sub" style="margin-top:.25rem">' + esc(t.setLine) + ' ' + esc(edited.join(' · ')) + '</p>' : '') +
       (rejected.length ? '<p class="db-sub" style="margin-top:.25rem">' + esc(t.notApplied) + ' ' + esc(rejected.join('; ')) + '</p>' : '') +
