@@ -69,12 +69,18 @@ export function refineBody(args: {
   what: RefineWhat;
   instruction: string;
   orientation?: Orientation;
+  headline?: string;
 }): Record<string, unknown> {
   if (args.what === "everything") {
     return { draftId: args.draftId, prompt: args.instruction };
   }
   if (args.what === "app-background") {
     return { draftId: args.draftId, regenTarget: "appBg", hint: args.instruction };
+  }
+  // A new headline goes on both screens; the Studio stores it on the draft
+  // before redrawing, so the painted words and the draft's headline agree.
+  if (args.headline !== undefined) {
+    return { draftId: args.draftId, regenTarget: "welcome", hint: args.instruction, headline: args.headline.trim() };
   }
   const regenTarget =
     args.orientation === "phone"
@@ -93,6 +99,7 @@ export function buildRefineBooth(studio: StudioClient) {
       description:
         "Change a booth draft from start_booth, using the draftId check_generation returned. " +
         "what='welcome' redraws the welcome screen from an instruction ('warmer colours', 'bigger headline', 'less clutter') while keeping the design; add orientation 'phone' or 'laptop' to redraw only that screen (1 redraw) — without it both screens are redrawn (2). " +
+        "To change the words on the welcome screen (the couple's names, a new headline), pass headline with the exact new words: it is stored on the draft and both screens are repainted with it (2 redraws). Never use orientation for that, or the phone and laptop screens say different things. " +
         "what='app-background' redraws the calmer backdrop behind the rest of the booth (1 redraw). " +
         "what='everything' rebuilds the whole draft from a NEW full description (spends 1 of the draft's 3 full generations) — only when the operator wants a different booth, not a tweak. " +
         "A draft has 5 redraws in total; check_generation reports what is left. Title, headline, link name and colours cannot be edited directly: they change only through a redraw instruction, or at create time (title, slug). " +
@@ -119,7 +126,15 @@ export function buildRefineBooth(studio: StudioClient) {
           .enum(["phone", "laptop"])
           .optional()
           .describe(
-            "Only with what='welcome': redraw just the phone (portrait) or laptop (landscape) screen. Omit to redraw both."
+            "Only with what='welcome': redraw just the phone (portrait) or laptop (landscape) screen. Omit to redraw both. Never with headline."
+          ),
+        headline: z
+          .string()
+          .min(2)
+          .max(60)
+          .optional()
+          .describe(
+            "Only with what='welcome': the new welcome headline exactly as it should read, in the booth's language (e.g. 'Sania & Senya'). Both screens are redrawn with it."
           ),
       },
       outputSchema: refineBoothOutput,
@@ -129,6 +144,7 @@ export function buildRefineBooth(studio: StudioClient) {
       what: RefineWhat;
       instruction: string;
       orientation?: Orientation;
+      headline?: string;
     }): Promise<RefineBoothHandle> => {
       const ownerKey = studio.ownerKey();
       const what = labelFor(args.instruction);
@@ -150,6 +166,14 @@ export function buildRefineBooth(studio: StudioClient) {
       }
       if (args.orientation && args.what !== "welcome") {
         return failed("orientation only applies to what='welcome'. Leave it out for other changes.");
+      }
+      if (args.headline !== undefined && args.what !== "welcome") {
+        return failed("headline only applies to what='welcome'. Leave it out for other changes.");
+      }
+      if (args.headline !== undefined && args.orientation) {
+        return failed(
+          "A new headline is painted on both screens, so it cannot be limited to one. Call again without orientation (2 redraws)."
+        );
       }
 
       const body = refineBody(args);

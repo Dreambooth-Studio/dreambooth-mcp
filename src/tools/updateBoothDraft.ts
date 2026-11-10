@@ -124,7 +124,7 @@ export const updateBoothDraftInput = {
     .min(1)
     .max(80)
     .optional()
-    .describe("Welcome headline. Only drafts whose welcome is laid out as text accept it; on an AI-designed welcome it is painted into the image and the reply says to use refine_booth."),
+    .describe("Welcome headline. Only drafts whose welcome is laid out as text accept it; on an AI-designed welcome it is painted into the image: use refine_booth with what='welcome' and headline instead."),
   subtext: z.string().min(1).max(140).optional().describe("Welcome subtext; same rule as headline."),
   language: z.string().min(2).max(10).optional().describe("Language code of the booth's own text: 'id', 'en', 'es'."),
   captureMode: z.enum(["standard", "frame-based"]).optional().describe("'standard' = classic strip, 'frame-based' = frame mode."),
@@ -225,7 +225,7 @@ export function buildUpdateBoothDraft(studio: StudioClient) {
       description:
         "Change a booth draft without a redraw: its title, link name, welcome button text, colours, capture mode, language, which frames and filters it carries, its AI effect, and the page settings the dashboard editor offers (photo count, countdown, timeouts, GIF/recording, retake, checkout, payment, result). " +
         "Use it after check_generation shows the draft and the operator asks for one of these; what it sets is applied when create_booth runs. " +
-        "It cannot change the welcome headline or subtext of an AI-designed welcome (those are painted into the image — use refine_booth), and prices or packages are set in the dashboard. " +
+        "It cannot change the welcome headline or subtext of an AI-designed welcome (those are painted into the image — use refine_booth with what='welcome' and headline), and prices or packages are set in the dashboard. " +
         "Answers at once with the updated draft, `applied` (what landed) and `rejected` (what did not, and why) — relay a rejection as a sentence, never as success. " +
         "It never touches a booth that already exists.",
       inputSchema: updateBoothDraftInput,

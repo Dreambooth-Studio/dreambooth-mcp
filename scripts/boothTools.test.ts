@@ -331,6 +331,46 @@ test("refine_booth maps what + orientation onto the Studio's regen targets", () 
   });
 });
 
+test("a new headline goes to both screens with the words, never one orientation", async () => {
+  // 2026-11-10: "make the welcome screen the couple's names" redrew one screen
+  // of two and left the old headline on the draft.
+  assert.deepEqual(
+    refineBody({ draftId: DRAFT_ID, what: "welcome", instruction: "use the couple's names", headline: " Sania & Senya " }),
+    { draftId: DRAFT_ID, regenTarget: "welcome", hint: "use the couple's names", headline: "Sania & Senya" }
+  );
+
+  const { studio, calls } = fakeStudio(() => DRAFT_REPLY);
+  const refine = buildRefineBooth(studio);
+  const oneScreen = await refine.handler({
+    draftId: DRAFT_ID,
+    what: "welcome",
+    orientation: "laptop",
+    instruction: "couple's names",
+    headline: "Sania & Senya",
+  });
+  assert.equal(oneScreen.state, "failed");
+  assert.match(String(oneScreen.error), /both screens/);
+  const wrongPart = await refine.handler({
+    draftId: DRAFT_ID,
+    what: "app-background",
+    instruction: "x",
+    headline: "Sania & Senya",
+  });
+  assert.equal(wrongPart.state, "failed");
+  assert.match(String(wrongPart.error), /only applies to what='welcome'/);
+  assert.equal(calls.length, 0, "refused before anything was spent");
+
+  const description = String(refine.config.description);
+  assert.match(description, /pass headline with the exact new words/);
+  assert.match(description, /Never use orientation for that/);
+});
+
+test("the draft card shows the laptop screen when only that one was redrawn", async () => {
+  const { generationWidgetHtml } = await import("../src/ui/generationResult.js");
+  assert.match(generationWidgetHtml, /imageTag\(draftImage\(d\)\)/);
+  assert.match(generationWidgetHtml, /r\.length === 1 && r\[0\] === "landscape" && d\.welcomeLandscapeUrl/);
+});
+
 test("refine_booth posts that body and keeps the draft id on the handle and the result", async () => {
   const { studio, calls } = fakeStudio(() => ({
     ...DRAFT_REPLY,
