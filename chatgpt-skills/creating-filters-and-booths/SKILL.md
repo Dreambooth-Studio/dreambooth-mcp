@@ -94,8 +94,9 @@ the image model, one version at a time.
 
 **Their words first, then a brief, not a caption.** The prompt goes to the
 Studio as it is, and the Studio treats it as the operator's own request. Open
-with what they said, in their words and language — that is the intent — and
-never swap a choice they made for one you prefer.
+with what they asked for, in their words and language — that is the intent —
+written as a description, without the "design me a" or "buatkan" around it and
+without quotation marks, and never swap a choice they made for one you prefer.
 Adjectives like "stunning, elegant, intricate, magical" carry no instruction;
 they pull every frame toward the same glossy, over-decorated look operators
 call AI slop. Keep their specifics exactly (names, colours, motif names) and
@@ -143,7 +144,12 @@ not call it speculatively or twice for one request.
 **Give the Studio facts and art direction, not copy.** It writes the title,
 headline and button text itself, and a prompt that already reads like a
 marketing caption ("an unforgettable, magical experience ✨") comes back as one.
-Open with what the operator said, in their words. Give names, ages, dates and
+Open with what the operator asked for, in their words, written as a description
+and not as a request: "Garden romance wedding in Bandung, warm and slightly
+faded", never `"Design me a garden romance booth…"`. Drop the wrapper ("design
+me a", "buatkan", "tolong") and keep quotation marks for wording that must be
+printed: the Studio puts quoted words on the welcome screen as they are, and a
+quoted request once came back with the headline "Design me a". Give names, ages, dates and
 places exactly as they said them, one visual reference in words ("1970s
 Indonesian film poster", "hand-painted warung sign"), two or three colours and
 two to four concrete objects or motifs. The reference is yours to pick when

@@ -63,16 +63,29 @@ test("the guidance names the operator's specifics as untouchable", () => {
   // Steering, not rewriting: names, colours and motif names pass through.
   assert.match(FRAME_BRIEF, /Keep their specifics exactly/);
   assert.match(BOOTH_BRIEF, /exactly as given/);
-  assert.match(BOOTH_BRIEF, /quote it/);
+  assert.match(BOOTH_BRIEF, /quote only that wording/);
 });
 
 test("every first-prompt brief starts from the operator's own words", () => {
   // Their sentence is the intent; the brief is an interpretation added after it.
   for (const brief of [FRAME_BRIEF, BOOTH_BRIEF]) {
-    assert.match(brief, /^Start with what the operator said, in their words and language/);
+    assert.match(brief, /^Start with what the operator asked for, in their words and language/);
     assert.match(brief, /Never swap a choice they made/);
   }
   assert.match(CHANGE_BRIEF, /operator's own words/);
+});
+
+test("the operator's request wrapper never reaches the Studio as quoted copy", () => {
+  // A quoted "Design me a garden romance booth…" came back as the welcome
+  // headline "Design me a" (2026-11-09): the Studio prints quoted wording.
+  for (const brief of [FRAME_BRIEF, BOOTH_BRIEF]) {
+    assert.match(brief, /description rather than a request/);
+    assert.match(brief, /'design me a'/);
+    assert.match(brief, /'buatkan'/);
+    assert.match(brief, /do not put it in quotation marks/);
+  }
+  assert.match(BOOTH_BRIEF, /quote only that wording/);
+  assert.match(BOOTH_BRIEF, /Quotation marks are for nothing else/);
 });
 
 test("a booth's visual reference is picked by the model, not demanded of the operator", () => {
