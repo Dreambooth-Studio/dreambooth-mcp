@@ -141,6 +141,12 @@ the language the booth should speak — and put all of it in the prompt. Each
 `start_booth` is a new draft and spends one of its three full generations, so do
 not call it speculatively or twice for one request.
 
+**Every booth has both screens.** Each draft gets a phone (portrait) and a
+laptop (landscape) welcome, and the booth shows whichever fits the screen it
+runs on; the card shows both. There is no orientation to set. When the operator
+asks for landscape, say the laptop screen is already there — do not redraw or
+start a new draft for it.
+
 **Give the Studio facts and art direction, not copy.** It writes the title,
 headline and button text itself, and a prompt that already reads like a
 marketing caption ("an unforgettable, magical experience ✨") comes back as one.
