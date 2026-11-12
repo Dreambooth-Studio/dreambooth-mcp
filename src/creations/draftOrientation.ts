@@ -2,11 +2,14 @@
  * Which way each booth draft's screen faces, as the operator asked for it.
  *
  * The Studio draws every draft for both screens (phone = portrait, laptop =
- * landscape) and the draft does not record which one the booth is for. That
- * is decided when the booth is created (`mode` on POST
- * /api/projects/onboarding). So a "landscape, please" said before
- * `start_booth` has to be carried here until `create_booth`. Before this, every
- * booth made from chat was created portrait, whatever was asked (2026-11-12).
+ * landscape), and the booth app shows whichever matches the device it runs
+ * on. What the orientation decides is the booth's primary canvas: its screen
+ * size, which welcome leads, and the thumbnail it is listed with. That is set
+ * when the booth is created (`mode` on POST /api/projects/onboarding), and the
+ * draft does not record it, so a "landscape, please" said before
+ * `start_booth` is carried here until `create_booth`. Before this, every
+ * booth made from chat was listed with its phone screen, so a landscape
+ * request looked ignored (2026-11-12).
  *
  * Same contract as `recentCreations`: in memory, keyed to the job store's owner
  * key, bounded in count and age, lost on restart. `create_booth` also takes the

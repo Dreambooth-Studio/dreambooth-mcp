@@ -283,8 +283,10 @@ export async function createBoothWork(
 
   // 6. The booth. No `theme`: the route falls back to the draft's palette,
   // which is exactly what /new sends. Built field by field. `mode` is the
-  // canvas: it was always "creator", so a booth asked for in landscape came
-  // out portrait (2026-11-12).
+  // primary canvas (screen size, leading welcome, thumbnail). The booth app
+  // still shows whichever screen matches its device; this was always
+  // "creator", so a booth asked for in landscape was listed portrait
+  // (2026-11-12).
   ctx.progress(orientation === "landscape" ? "Creating the booth (landscape)…" : "Creating the booth…");
   let created: { slug?: string };
   try {
