@@ -7,11 +7,14 @@ import {
   BOOTH_GENERATE_TIMEOUT_MS,
   BOOTH_JOB_MAX_RUNTIME_MS,
   BOOTH_STARTED_NOTE,
+  ORIENTATION_DESCRIBE,
   boothErrorFor,
   summariseDraft,
   type BoothDraftReply,
   type BoothDraftResult,
+  type BoothOrientation,
 } from "./boothGeneration.js";
+import { draftOrientations } from "../creations/draftOrientation.js";
 
 /**
  * Designs a whole booth from a description, in the background.
@@ -29,6 +32,10 @@ import {
  * No clarify step. /new may ask the creator a few questions first; the model
  * is already in a conversation and can ask its own, so the tool description
  * tells it to gather what /new would ask and put it in the prompt.
+ *
+ * `orientation` is not sent to the Studio: both screens are always drawn, and
+ * which one the booth is laid out for is decided at create. It is remembered
+ * against the draft so `create_booth` and the draft card use it.
  */
 
 export const startBoothOutput = {
@@ -50,6 +57,7 @@ export function buildStartBooth(studio: StudioClient) {
       description:
         "Design a complete photobooth (a 'booth') for this operator from a description — the Studio designs the welcome screen for phone and laptop, the in-booth background, the colour theme, the capture mode, a title and a link name, exactly as dreambooth.app/new does. " +
         "Before calling, gather in chat what /new would ask and put ALL of it in the prompt: the occasion or business, the vibe or style, colours, and the language the booth should speak — there is no separate questions step. " +
+        "If the operator wants a landscape (wide) booth, pass orientation 'landscape' — saying it in the prompt alone does not change the screen. " +
         "It returns a job id immediately; call check_generation, and do NOT describe the booth as designed or created until that says done. " +
         "The result is a DRAFT with a draftId: nothing is in the operator's booth list until create_booth. " +
         "Every call makes a new draft and spends 1 of its 3 full generations, and an account may start 10 drafts an hour — never call it speculatively or twice for one request; change a draft with refine_booth instead.",
@@ -71,10 +79,11 @@ export function buildStartBooth(studio: StudioClient) {
           .describe(
             "The language the booth's own text should be in, as a code: 'id', 'en', 'es'. Defaults to English — ask if the operator's booth is not in English."
           ),
+        orientation: z.enum(["portrait", "landscape"]).optional().describe(ORIENTATION_DESCRIBE),
       },
       outputSchema: startBoothOutput,
     },
-    handler: async (args: { prompt: string; language?: string }) => {
+    handler: async (args: { prompt: string; language?: string; orientation?: BoothOrientation }) => {
       // Resolved before the job starts, so a bad credential fails here — where
       // the model is still in a tool call that can say so.
       const ownerKey = studio.ownerKey();
@@ -105,7 +114,10 @@ export function buildStartBooth(studio: StudioClient) {
             } catch (err) {
               throw boothErrorFor(err, "generate");
             }
-            return summariseDraft(reply);
+            const draft = summariseDraft(reply);
+            if (!args.orientation) return draft;
+            draftOrientations.remember(ownerKey, draft.draftId, args.orientation);
+            return { ...draft, orientation: args.orientation };
           },
           { kind: "booth-draft", maxRuntimeMs: BOOTH_JOB_MAX_RUNTIME_MS }
         );

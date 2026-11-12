@@ -13,15 +13,20 @@ import {
   DRAW_POLL_ATTEMPTS,
   DRAW_POLL_INTERVAL_MS,
   OBJECT_ID_RE,
+  ORIENTATION_DESCRIBE,
   SLUG_RE,
   boothErrorFor,
   pickStarterFrames,
   readBoothDraft,
   resolveAiEffect,
+  studioModeFor,
+  welcomeUrlFor,
   type BoothCreated,
   type BoothDraftResult,
+  type BoothOrientation,
 } from "./boothGeneration.js";
 import { recentCreations } from "../creations/recent.js";
+import { draftOrientations } from "../creations/draftOrientation.js";
 
 /**
  * Turns a booth draft into a booth — the one step in the booth flow that makes
@@ -34,7 +39,7 @@ import { recentCreations } from "../creations/recent.js";
  *   3. the booth's own three frames           POST /api/onboarding/draft-frames (drawn now, like /new's Strip step)
  *   4. three starter frames from the catalogue  GET /api/onboarding/frames (+ any the operator named)
  *   5. the Studio's default "Normal" filter   GET  /api/onboarding/catalog (+ any the operator named)
- *   6. the booth                               POST /api/projects/onboarding
+ *   6. the booth                               POST /api/projects/onboarding (mode = portrait or landscape canvas)
  *   7. its id, for the dashboard link          GET  /api/projects/by-slug
  *
  * Steps 3–5 are what makes the created booth complete rather than bare: the
@@ -93,6 +98,11 @@ export interface CreateBoothArgs {
   title?: string;
   slug?: string;
   captureMode?: "standard" | "frame-based";
+  /**
+   * The screen the booth is laid out for. The handler fills it from what the
+   * conversation chose earlier for this draft; portrait when nothing was.
+   */
+  orientation?: BoothOrientation;
   aiEffectTitle?: string;
   frameIds?: string[];
   filterIds?: string[];
@@ -131,6 +141,7 @@ export async function createBoothWork(
   } = {}
 ): Promise<BoothCreated> {
   const wait = options.pollSleep ?? sleep;
+  const orientation: BoothOrientation = args.orientation ?? "portrait";
   const get = async <T>(path: string, query: Record<string, string | undefined>) =>
     studio.get<T>(path, query);
 
@@ -271,14 +282,16 @@ export async function createBoothWork(
   ]).slice(0, 24);
 
   // 6. The booth. No `theme`: the route falls back to the draft's palette,
-  // which is exactly what /new sends. Built field by field.
-  ctx.progress("Creating the booth…");
+  // which is exactly what /new sends. Built field by field. `mode` is the
+  // canvas: it was always "creator", so a booth asked for in landscape came
+  // out portrait (2026-11-12).
+  ctx.progress(orientation === "landscape" ? "Creating the booth (landscape)…" : "Creating the booth…");
   let created: { slug?: string };
   try {
     created = await studio.post<{ slug?: string }>(
       "/api/projects/onboarding",
       {
-        mode: "creator",
+        mode: studioModeFor(orientation),
         title,
         slug,
         draftId: args.draftId,
@@ -300,7 +313,7 @@ export async function createBoothWork(
   // the list page is a fine fallback, and the draft's welcome design stands
   // in for the thumbnail.
   let projectId: string | undefined;
-  let imageUrl: string | undefined = options.draftImage || draft?.welcomePortraitUrl || undefined;
+  let imageUrl: string | undefined = options.draftImage || welcomeUrlFor(draft, orientation);
   try {
     const doc = await get<{ _id?: string; thumbnail?: string }>("/api/projects/by-slug", { slug: createdSlug });
     if (doc?._id) projectId = String(doc._id);
@@ -320,6 +333,7 @@ export async function createBoothWork(
       ? `${config.apiUrl}/dashboard/projects/${projectId}/editor`
       : `${config.apiUrl}/dashboard/projects`,
     imageUrl,
+    orientation,
     ownFrameCount,
     catalogFrameCount: frameIds.length,
     filterCount: filterIds.length,
@@ -334,6 +348,7 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
       title: "Create the booth",
       description:
         "Create the booth from a finished draft — the step that makes something real, live at its public link. Call it only after the operator has seen the draft via check_generation and agreed to create it; the title and link name (slug) default to the draft's unless the operator chose others. " +
+        "If the operator asked for a landscape (wide) booth at any point, pass orientation 'landscape'; it otherwise keeps what start_booth or update_booth_draft set in this conversation, else portrait. " +
         "It reads the draft first (so everything set with update_booth_draft — settings, frames, filters, AI effect — is carried), checks the link name, draws the booth's own three photo-strip frames (3 images, up to five minutes), adds three starter frames from the catalogue and the Studio's default 'Normal' filter the way dreambooth.app/new does, then creates the booth with the draft's welcome design, background, colour theme and capture mode. Frames saved with save_frame and filters made with create_filter on this connection are carried automatically; ids can also be passed. " +
         "Tell the operator it takes 2-6 minutes. Returns a job id; check_generation reports progress and, when done, the booth's public link, id and a dashboard link. If the link name is taken it stops before drawing anything — ask for another and call again. " +
         "Creating twice with different link names makes two booths. The booth is live (unlisted) at once; there is no tool that edits or deletes a booth — changes happen in the dashboard.",
@@ -358,6 +373,10 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
           .enum(["standard", "frame-based"])
           .optional()
           .describe("Leave unset to keep what the draft proposed ('standard' = classic strip, 'frame-based' = frame mode)."),
+        orientation: z
+          .enum(["portrait", "landscape"])
+          .optional()
+          .describe(ORIENTATION_DESCRIBE + " Leave unset to keep what start_booth or update_booth_draft set for this draft."),
         aiEffectTitle: z
           .string()
           .max(80)
@@ -413,14 +432,18 @@ export function buildCreateBooth(studio: StudioClient, config: Config) {
       const draftTerms = latestDraft?.result
         ? [...latestDraft.result.frameTags, latestDraft.result.filterMood]
         : [];
-      const draftImage = latestDraft?.result?.welcomePortraitUrl;
+      // Named on the call, else chosen for this draft earlier in the
+      // conversation, else portrait (in createBoothWork).
+      const orientation = args.orientation ?? draftOrientations.get(ownerKey, args.draftId);
+      draftOrientations.remember(ownerKey, args.draftId, orientation);
+      const draftImage = welcomeUrlFor(latestDraft?.result, orientation);
 
       try {
         const job = jobs.start<BoothCreated>(
           ownerKey,
           what,
           (ctx) =>
-            createBoothWork(studio, config, args, ctx, {
+            createBoothWork(studio, config, { ...args, orientation }, ctx, {
               draftTerms,
               draftImage,
               recentFrameIds: recentCreations.list(ownerKey, "frame"),

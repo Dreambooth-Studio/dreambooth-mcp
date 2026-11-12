@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { StudioClient } from "../studio/client.js";
-import { DRAFT_ID_RE, readBoothDraft, type BoothDraftResult } from "./boothGeneration.js";
+import { DRAFT_ID_RE, readBoothDraft, withOrientation, type BoothDraftResult } from "./boothGeneration.js";
 import { BOOTH_DRAFT_OUTPUT } from "./checkGeneration.js";
 
 /**
@@ -39,7 +39,7 @@ export interface GetBoothDraftResult {
 }
 
 export const DRAFT_READ_NOTE =
-  "This is a draft, not a booth. update_booth_draft changes its title, button text, colours, capture settings, language, frames, filters and AI effect without a redraw; " +
+  "This is a draft, not a booth. update_booth_draft changes its title, button text, colours, capture settings, language, orientation, frames, filters and AI effect without a redraw; " +
   "refine_booth redraws the welcome or background; create_booth makes it real.";
 
 export function buildGetBoothDraft(studio: StudioClient) {
@@ -57,7 +57,8 @@ export function buildGetBoothDraft(studio: StudioClient) {
       outputSchema: getBoothDraftOutput,
     },
     handler: async (args: { draftId: string }): Promise<GetBoothDraftResult> => {
-      const draft = await readBoothDraft(studio, args.draftId);
+      const ownerKey = studio.ownerKey();
+      const draft = withOrientation(ownerKey, await readBoothDraft(studio, args.draftId));
       return {
         kind: "booth-draft" as const,
         jobId: "",
