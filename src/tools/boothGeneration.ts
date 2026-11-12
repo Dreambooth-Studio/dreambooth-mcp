@@ -72,6 +72,16 @@ export const DRAW_POLL_INTERVAL_MS = 8_000;
 /** How often the progress endpoint is read while a rebuild runs. */
 export const PROGRESS_POLL_MS = 5_000;
 
+/**
+ * Every booth has a phone (portrait) and a laptop (landscape) welcome screen
+ * and shows the one that fits the device it runs on. Said to the model so a
+ * request for "landscape" gets that answer, not a redraw or a new draft: the
+ * phone screen alone in the list once read as "it ignored landscape".
+ */
+export const BOTH_SCREENS_NOTE =
+  "Every booth gets two welcome screens, phone (portrait) and laptop (landscape), and shows whichever fits the screen it runs on; there is no orientation to choose. " +
+  "If the operator asks for landscape or portrait, tell them both are included and the card shows both — no redraw or new draft is needed for that.";
+
 /* --------------------------------------------------------------- shapes --- */
 
 /** The subset of the Studio's BoothSpec these tools read. */
@@ -164,7 +174,7 @@ export interface BoothCreated {
   title: string;
   boothUrl: string;
   dashboardUrl: string;
-  /** The booth's rendered welcome thumbnail, else the draft's welcome design — so the card can show it. */
+  /** Both welcome screens as the Studio lists the booth, else its phone thumbnail, else the draft's welcome — so the card can show it. */
   imageUrl?: string;
   ownFrameCount: number;
   catalogFrameCount: number;

@@ -4,7 +4,7 @@ import type { StudioClient } from "../studio/client.js";
 import type { Config } from "../config.js";
 import { jobs, type Job, type JobKind } from "../jobs/store.js";
 import type { GenerationResult } from "./frameGeneration.js";
-import type { BoothCreated, BoothDraftResult } from "./boothGeneration.js";
+import { BOTH_SCREENS_NOTE, type BoothCreated, type BoothDraftResult } from "./boothGeneration.js";
 
 /**
  * Reports on any background work this server started: a frame generation
@@ -233,7 +233,7 @@ export function buildCheckGeneration(studio: StudioClient, config: Config) {
           state: "done",
           draft,
           note:
-            `This is a draft, not a booth. ${CARD_SHOWS_IMAGE} ` +
+            `This is a draft, not a booth. ${CARD_SHOWS_IMAGE} ${BOTH_SCREENS_NOTE} ` +
             "update_booth_draft changes its title, button text, colours, capture settings, language, frames, filters and AI effect without a redraw; " +
             "refine_booth redraws the welcome or background (redraws are limited per draft); create_booth makes it real — it takes the draft's title and link name unless the operator chose others. " +
             "get_booth_draft reads the draft back later.",

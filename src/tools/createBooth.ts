@@ -302,11 +302,17 @@ export async function createBoothWork(
   let projectId: string | undefined;
   let imageUrl: string | undefined = options.draftImage || draft?.welcomePortraitUrl || undefined;
   try {
-    const doc = await get<{ _id?: string; thumbnail?: string }>("/api/projects/by-slug", { slug: createdSlug });
+    const doc = await get<{ _id?: string; thumbnail?: string; screensThumbnail?: string }>(
+      "/api/projects/by-slug",
+      { slug: createdSlug }
+    );
     if (doc?._id) projectId = String(doc._id);
-    if (typeof doc?.thumbnail === "string" && doc.thumbnail.startsWith("https://")) {
-      imageUrl = doc.thumbnail;
-    }
+    // Both screens side by side when the Studio drew them (it shows whichever
+    // fits the device), else the phone screen.
+    const listed = [doc?.screensThumbnail, doc?.thumbnail].find(
+      (u): u is string => typeof u === "string" && u.startsWith("https://")
+    );
+    if (listed) imageUrl = listed;
   } catch {
     /* fall back to the list page and the draft's image */
   }
