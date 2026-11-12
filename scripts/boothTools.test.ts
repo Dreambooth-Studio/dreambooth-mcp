@@ -20,7 +20,6 @@ import {
   summariseDraft,
   withDraftProgress,
 } from "../src/tools/boothGeneration.js";
-import { DraftOrientations } from "../src/creations/draftOrientation.js";
 import { AUTH_REQUIRED_TOOLS, requiresAuth } from "../src/mcp/toolAuth.js";
 import { ownerKeyFor, type JobContext } from "../src/jobs/store.js";
 import { StudioError } from "../src/studio/errors.js";
@@ -263,28 +262,6 @@ test("start_booth posts the prompt and language only, with the long timeout", as
   assert.ok(BOOTH_GENERATE_TIMEOUT_MS >= 300_000, "at least the route's own ceiling");
 });
 
-test("start_booth keeps a landscape choice off the Studio call and on the draft", async () => {
-  const { studio, calls } = fakeStudio(() => DRAFT_REPLY);
-  const start = buildStartBooth(studio);
-  const check = buildCheckGeneration(studio, CONFIG);
-
-  const started = await start.handler({ prompt: "wedding, sage and white roses", orientation: "landscape" });
-  await drained();
-
-  // Both screens are always drawn; the orientation is decided at create.
-  assert.deepEqual(calls[0].body, { prompt: "wedding, sage and white roses", locale: undefined });
-  const done = await check.handler({ jobId: started.jobId });
-  assert.equal(done.draft?.orientation, "landscape");
-
-  // Without one, the draft says nothing, which means portrait.
-  const plain = await start.handler({ prompt: "wedding, sage and white roses" });
-  await drained();
-  assert.equal((await check.handler({ jobId: plain.jobId })).draft?.orientation, undefined);
-
-  const description = String(start.config.description);
-  assert.match(description, /pass orientation 'landscape'/);
-});
-
 test("check_generation reports a booth draft with what the next step needs", async () => {
   const { studio } = fakeStudio(() => DRAFT_REPLY);
   const start = buildStartBooth(studio);
@@ -392,13 +369,6 @@ test("the draft card shows the laptop screen when only that one was redrawn", as
   const { generationWidgetHtml } = await import("../src/ui/generationResult.js");
   assert.match(generationWidgetHtml, /imageTag\(draftImage\(d\)\)/);
   assert.match(generationWidgetHtml, /r\.length === 1 && r\[0\] === "landscape" && d\.welcomeLandscapeUrl/);
-});
-
-test("the draft card shows the laptop screen for a landscape booth", async () => {
-  const { generationWidgetHtml } = await import("../src/ui/generationResult.js");
-  assert.match(generationWidgetHtml, /d\.orientation === "landscape" && d\.welcomeLandscapeUrl/);
-  // A redraw of only the phone screen still shows the phone screen.
-  assert.match(generationWidgetHtml, /r\.length === 1 && r\[0\] === "portrait" && d\.welcomePortraitUrl/);
 });
 
 test("refine_booth posts that body and keeps the draft id on the handle and the result", async () => {
@@ -643,67 +613,6 @@ test("create_booth runs /new's last screens in order and sends no theme", async 
   assert.ok(seen.some((s) => /link name/i.test(s)) && seen.some((s) => /Creating the booth/.test(s)));
 });
 
-test("a landscape booth is created on the landscape canvas; the catalogues stay on photo strips", async () => {
-  const { studio, calls } = fakeStudio(
-    happyCreate({
-      // No thumbnail back, so the card falls back to the draft's own screen.
-      "GET /api/projects/by-slug": () => ({ _id: HEX24("b") }),
-    })
-  );
-  const result = await createBoothWork(studio, CONFIG, { ...CREATE_ARGS, orientation: "landscape" }, ctxOf([]), {
-    pollSleep: noSleep,
-  });
-
-  const create = calls.find((c) => c.path === "/api/projects/onboarding")?.body as Record<string, unknown>;
-  assert.equal(create.mode, "product", "the Studio's landscape canvas (screenSizesForMode)");
-  // "product" on the catalogues means square product frames, not a wide screen.
-  assert.equal(calls.find((c) => c.path === "/api/onboarding/frames")?.query?.mode, "creator");
-  assert.equal(calls.find((c) => c.path === "/api/onboarding/catalog")?.query?.mode, "creator");
-  assert.equal(result.orientation, "landscape");
-  assert.equal(result.imageUrl, DRAFT_REPLY.assets.welcomeBgLandscape);
-});
-
-test("create_booth keeps the orientation start_booth was given, and the call can still change it", async () => {
-  const { studio, calls } = fakeStudio(
-    happyCreate({ "POST /api/onboarding/generate": () => DRAFT_REPLY })
-  );
-  const start = buildStartBooth(studio);
-  const create = buildCreateBooth(studio, CONFIG);
-  const check = buildCheckGeneration(studio, CONFIG);
-  const createBody = () =>
-    calls.filter((c) => c.path === "/api/projects/onboarding").at(-1)?.body as Record<string, unknown>;
-
-  await start.handler({ prompt: "wedding, sage and white roses", orientation: "landscape" });
-  await drained();
-
-  const made = await create.handler(CREATE_ARGS);
-  assert.equal(made.state, "running");
-  await drained();
-  assert.equal(createBody().mode, "product", "landscape asked at start_booth, landscape created");
-  const done = await check.handler({ jobId: made.jobId });
-  assert.equal(done.booth?.orientation, "landscape");
-
-  // The call wins over what was remembered.
-  await create.handler({ ...CREATE_ARGS, slug: "bandung-wedding-2", orientation: "portrait" });
-  await drained();
-  assert.equal(createBody().mode, "creator");
-
-  const description = String(create.config.description);
-  assert.match(description, /pass orientation 'landscape'/);
-});
-
-test("the orientation memory is per owner and forgets after a day", () => {
-  let now = 0;
-  const memory = new DraftOrientations(() => now);
-  memory.remember("owner-a", DRAFT_ID, "landscape");
-  assert.equal(memory.get("owner-a", DRAFT_ID), "landscape");
-  assert.equal(memory.get("owner-b", DRAFT_ID), undefined, "another account's draft id is not a match");
-  memory.remember("owner-a", DRAFT_ID, undefined);
-  assert.equal(memory.get("owner-a", DRAFT_ID), "landscape", "nothing chosen leaves the choice alone");
-  now = 25 * 60 * 60 * 1000;
-  assert.equal(memory.get("owner-a", DRAFT_ID), undefined);
-});
-
 test("a taken link name stops the create before anything is drawn", async () => {
   const { studio, calls } = fakeStudio(
     happyCreate({ "GET /api/projects/by-slug?checkOnly": () => ({ available: false }) })
@@ -856,12 +765,7 @@ test("every booth and filter-preview result satisfies the published output schem
     await client.listTools();
 
     // Design: running (with progress), then done with a draft.
-    // Landscape, so every result below carries `orientation` through the schema.
-    const started = await call("start_booth", {
-      prompt: "wedding in Bandung, warm gold",
-      language: "id",
-      orientation: "landscape",
-    });
+    const started = await call("start_booth", { prompt: "wedding in Bandung, warm gold", language: "id" });
     assert.equal(started.isError, undefined);
     assert.equal(started.structuredContent?.state, "running");
     const jobId = String(started.structuredContent?.jobId);
@@ -895,7 +799,6 @@ test("every booth and filter-preview result satisfies the published output schem
     assert.equal(boothDone.structuredContent?.state, "done");
     assert.equal(boothDone.structuredContent?.kind, "booth");
     assert.equal((boothDone.structuredContent?.booth as { slug?: string })?.slug, "bandung-wedding");
-    assert.equal((boothDone.structuredContent?.booth as { orientation?: string })?.orientation, "landscape");
 
     // Preview: a URL and the split.
     const previewPromise = call("preview_filter", { adjustments: { contrast: 112, shadows: 20 } });

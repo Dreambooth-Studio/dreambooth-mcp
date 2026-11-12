@@ -141,14 +141,6 @@ the language the booth should speak — and put all of it in the prompt. Each
 `start_booth` is a new draft and spends one of its three full generations, so do
 not call it speculatively or twice for one request.
 
-**Landscape is an argument, not a word in the prompt.** Every draft is drawn for
-both screens, phone (tall) and laptop (wide), and the booth is laid out portrait
-unless told otherwise. When the operator asks for landscape, horizontal or wide,
-or says it runs on a laptop, monitor or TV, pass `orientation: "landscape"` to
-`start_booth` (or to `update_booth_draft` if they say it later). `create_booth`
-keeps that choice; pass it there too if in doubt. Writing "landscape" only in
-the prompt still gives a portrait booth.
-
 **Give the Studio facts and art direction, not copy.** It writes the title,
 headline and button text itself, and a prompt that already reads like a
 marketing caption ("an unforgettable, magical experience ✨") comes back as one.
@@ -183,8 +175,8 @@ booth is ready".
   draft keeps the new headline (two redraws). Redraws are limited (five per
   draft, three full rebuilds); `check_generation` reports what is left.
 - **`update_booth_draft` sets, without a redraw** — the title, the link name,
-  the welcome button text, the colours, capture mode, the booth's language, its
-  orientation (portrait or landscape), which frames and filters it carries, its AI effect, and the page settings the
+  the welcome button text, the colours, capture mode, the booth's language,
+  which frames and filters it carries, its AI effect, and the page settings the
   dashboard editor offers: number of photos, countdown, timeouts, GIF and
   recording, retake, checkout, payment, result. It answers at once with the
   draft, `applied` and `rejected`. **Relay a rejection as a sentence** ("the

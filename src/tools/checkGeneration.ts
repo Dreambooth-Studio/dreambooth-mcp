@@ -53,8 +53,6 @@ export const BOOTH_DRAFT_OUTPUT = z.object({
   remainingFullGenerations: z.number(),
   remainingRegens: z.number(),
   regenerated: z.array(z.string()).optional(),
-  // The screen the booth will be laid out for, when one was chosen.
-  orientation: z.enum(["portrait", "landscape"]).optional(),
   // What update_booth_draft gave the draft, when anything.
   frameIds: z.array(z.string()).optional(),
   filterIds: z.array(z.string()).optional(),
@@ -70,7 +68,6 @@ const BOOTH_CREATED_OUTPUT = z.object({
   boothUrl: z.string(),
   dashboardUrl: z.string(),
   imageUrl: z.string().optional(),
-  orientation: z.enum(["portrait", "landscape"]).optional(),
   ownFrameCount: z.number(),
   catalogFrameCount: z.number(),
   filterCount: z.number(),

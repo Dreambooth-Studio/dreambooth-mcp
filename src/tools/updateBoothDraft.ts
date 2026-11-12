@@ -5,18 +5,13 @@ import {
   DRAFT_ID_RE,
   DRAFT_READ_TIMEOUT_MS,
   OBJECT_ID_RE,
-  ORIENTATION_DESCRIBE,
   SLUG_RE,
   boothErrorFor,
-  readBoothDraft,
   resolveAiEffect,
   summariseDraft,
-  withOrientation,
   type BoothDraftReply,
   type BoothDraftResult,
-  type BoothOrientation,
 } from "./boothGeneration.js";
-import { draftOrientations } from "../creations/draftOrientation.js";
 import { BOOTH_DRAFT_OUTPUT } from "./checkGeneration.js";
 import { DRAFT_READ_NOTE } from "./getBoothDraft.js";
 
@@ -39,10 +34,6 @@ import { DRAFT_READ_NOTE } from "./getBoothDraft.js";
  * Synchronous (one PATCH), idempotent (sending the same edits twice leaves the
  * same draft), and every field the Studio could not apply comes back by name
  * in `rejected` so the model can tell the operator which word did not land.
- *
- * `orientation` is the one field the Studio's draft does not hold: it is kept
- * in this process (draftOrientation.ts) for `create_booth`, which also takes
- * it as an argument. Alone, it is a read of the draft rather than a PATCH.
  */
 
 const settingsSchema = z
@@ -137,7 +128,6 @@ export const updateBoothDraftInput = {
   subtext: z.string().min(1).max(140).optional().describe("Welcome subtext; same rule as headline."),
   language: z.string().min(2).max(10).optional().describe("Language code of the booth's own text: 'id', 'en', 'es'."),
   captureMode: z.enum(["standard", "frame-based"]).optional().describe("'standard' = classic strip, 'frame-based' = frame mode."),
-  orientation: z.enum(["portrait", "landscape"]).optional().describe(ORIENTATION_DESCRIBE + " No redraw: the draft already has both screens."),
   palette: paletteSchema.optional().describe("Theme colours as #RRGGBB: primaryColor, secondaryColor, backgroundColor. Only the ones given change."),
   frameIds: z
     .array(z.string().regex(OBJECT_ID_RE))
@@ -184,7 +174,6 @@ export interface UpdateBoothDraftArgs {
   subtext?: string;
   language?: string;
   captureMode?: "standard" | "frame-based";
-  orientation?: BoothOrientation;
   palette?: { primaryColor?: string; secondaryColor?: string; backgroundColor?: string };
   frameIds?: string[];
   filterIds?: string[];
@@ -234,7 +223,7 @@ export function buildUpdateBoothDraft(studio: StudioClient) {
     config: {
       title: "Change a booth draft's settings",
       description:
-        "Change a booth draft without a redraw: its title, link name, welcome button text, colours, capture mode, language, screen orientation (portrait or landscape), which frames and filters it carries, its AI effect, and the page settings the dashboard editor offers (photo count, countdown, timeouts, GIF/recording, retake, checkout, payment, result). " +
+        "Change a booth draft without a redraw: its title, link name, welcome button text, colours, capture mode, language, which frames and filters it carries, its AI effect, and the page settings the dashboard editor offers (photo count, countdown, timeouts, GIF/recording, retake, checkout, payment, result). " +
         "Use it after check_generation shows the draft and the operator asks for one of these; what it sets is applied when create_booth runs. " +
         "It cannot change the welcome headline or subtext of an AI-designed welcome (those are painted into the image — use refine_booth with what='welcome' and headline), and prices or packages are set in the dashboard. " +
         "Answers at once with the updated draft, `applied` (what landed) and `rejected` (what did not, and why) — relay a rejection as a sentence, never as success. " +
@@ -243,7 +232,6 @@ export function buildUpdateBoothDraft(studio: StudioClient) {
       outputSchema: updateBoothDraftOutput,
     },
     handler: async (args: UpdateBoothDraftArgs): Promise<UpdateBoothDraftResult> => {
-      const ownerKey = studio.ownerKey();
       const failed = (error: string): UpdateBoothDraftResult => ({
         kind: "booth-draft" as const,
         jobId: "",
@@ -261,25 +249,7 @@ export function buildUpdateBoothDraft(studio: StudioClient) {
         throw err;
       }
       if (Object.keys(body).length === 1) {
-        if (!args.orientation) {
-          return failed("Nothing to change was given. Name at least one field: title, slug, buttonText, language, captureMode, orientation, palette, frameIds, filterIds, aiEffectTitle or settings.");
-        }
-        // Only the orientation: nothing for the Studio to store, so read the
-        // draft back (which also confirms it exists) and show it that way.
-        const read = await readBoothDraft(studio, args.draftId);
-        draftOrientations.remember(ownerKey, args.draftId, args.orientation);
-        const draft = withOrientation(ownerKey, read);
-        return {
-          kind: "booth-draft" as const,
-          jobId: "",
-          state: "done",
-          what: draft.title || args.draftId,
-          draftId: args.draftId,
-          draft,
-          applied: ["orientation"],
-          rejected: [],
-          note: `Applied: orientation (${args.orientation}). ${DRAFT_READ_NOTE}`,
-        };
+        return failed("Nothing to change was given. Name at least one field: title, slug, buttonText, language, captureMode, palette, frameIds, filterIds, aiEffectTitle or settings.");
       }
 
       let reply: BoothDraftReply;
@@ -288,12 +258,8 @@ export function buildUpdateBoothDraft(studio: StudioClient) {
       } catch (err) {
         throw boothErrorFor(err, "edit");
       }
-      draftOrientations.remember(ownerKey, args.draftId, args.orientation);
-      const draft = withOrientation(ownerKey, summariseDraft(reply));
-      const applied = [
-        ...(Array.isArray(reply.applied) ? reply.applied : []),
-        ...(args.orientation ? ["orientation"] : []),
-      ];
+      const draft = summariseDraft(reply);
+      const applied = Array.isArray(reply.applied) ? reply.applied : [];
       const rejected = Array.isArray(reply.rejected) ? reply.rejected : [];
       const note =
         (applied.length

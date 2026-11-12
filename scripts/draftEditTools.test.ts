@@ -224,33 +224,6 @@ test("update_booth_draft with nothing to change, or an unknown effect, answers a
   assert.equal(calls.filter((c) => c.method === "PATCH").length, 0, "nothing patched");
 });
 
-test("update_booth_draft sets the orientation without a PATCH, and never sends it to the Studio", async () => {
-  const { studio, calls } = fakeStudio((call) =>
-    call.method === "PATCH"
-      ? { ...DRAFT_REPLY, applied: ["cta"], rejected: [] }
-      : { ...DRAFT_REPLY, overrides: null, overridesSummary: [] }
-  );
-
-  // Alone: the draft is read back, shown wide, and nothing is patched.
-  const only = await buildUpdateBoothDraft(studio).handler({ draftId: DRAFT_ID, orientation: "landscape" });
-  assert.equal(only.state, "done");
-  assert.deepEqual(only.applied, ["orientation"]);
-  assert.equal(only.draft?.orientation, "landscape");
-  assert.match(String(only.note), /Applied: orientation \(landscape\)/);
-  assert.deepEqual(calls.map((c) => `${c.method} ${c.path}`), ["GET /api/onboarding/draft"]);
-
-  // With other fields: they are patched, the orientation is not.
-  const both = await buildUpdateBoothDraft(studio).handler({
-    draftId: DRAFT_ID,
-    buttonText: "Mulai",
-    orientation: "landscape",
-  });
-  const patch = calls.find((c) => c.method === "PATCH");
-  assert.deepEqual(patch?.body, { draftId: DRAFT_ID, cta: "Mulai" });
-  assert.deepEqual(both.applied, ["cta", "orientation"]);
-  assert.equal(both.draft?.orientation, "landscape");
-});
-
 test("update_booth_draft on a Studio without the route says what still works", async () => {
   const { studio } = fakeStudio((call) => {
     if (call.method === "PATCH") throw new StudioError("Nothing found at /api/onboarding/draft.", 404, false);

@@ -323,16 +323,13 @@ const SCRIPT = `
   }
 
   /**
-   * The screen to show: the one a redraw changed when it changed only one
-   * (showing the untouched screen made the change look like it had not
-   * happened), else the one the booth will be laid out for — the laptop
-   * screen for a landscape booth, otherwise the phone one.
+   * The screen to show: the phone one, unless a redraw changed only the
+   * laptop one. Showing the untouched phone screen after a laptop redraw made
+   * the change look like it had not happened.
    */
   function draftImage(d) {
     var r = Array.isArray(d.regenerated) ? d.regenerated : [];
     if (r.length === 1 && r[0] === "landscape" && d.welcomeLandscapeUrl) return d.welcomeLandscapeUrl;
-    if (r.length === 1 && r[0] === "portrait" && d.welcomePortraitUrl) return d.welcomePortraitUrl;
-    if (d.orientation === "landscape" && d.welcomeLandscapeUrl) return d.welcomeLandscapeUrl;
     return d.welcomePortraitUrl || d.welcomeLandscapeUrl;
   }
 
@@ -346,9 +343,9 @@ const SCRIPT = `
       g: typeof d.remainingFullGenerations === "number" ? d.remainingFullGenerations : "?",
       r: typeof d.remainingRegens === "number" ? d.remainingRegens : "?"
     });
-    // Capture mode, language and orientation, then what update_booth_draft set
-    // and what it could not — the operator should see both without reading the answer.
-    var mode = [d.captureMode, d.language, d.orientation].filter(Boolean).join(" · ");
+    // Capture mode and language, then what update_booth_draft set and what it
+    // could not — the operator should see both without reading the answer.
+    var mode = [d.captureMode, d.language].filter(Boolean).join(" · ");
     var edited = Array.isArray(d.edited) ? d.edited : [];
     var rejected = Array.isArray(out.rejected)
       ? out.rejected.map(function (r) { return (r && r.field ? r.field + " " : "") + (r && r.reason ? r.reason : ""); })

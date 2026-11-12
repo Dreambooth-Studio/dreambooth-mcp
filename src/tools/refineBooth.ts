@@ -11,7 +11,6 @@ import {
   boothErrorFor,
   summariseDraft,
   withDraftProgress,
-  withOrientation,
   type BoothDraftReply,
   type BoothDraftResult,
 } from "./boothGeneration.js";
@@ -199,7 +198,7 @@ export function buildRefineBooth(studio: StudioClient) {
               args.what === "everything"
                 ? await withDraftProgress(studio, args.draftId, ctx, call)
                 : await call();
-            return withOrientation(ownerKey, summariseDraft(reply));
+            return summariseDraft(reply);
           },
           { kind: "booth-draft", maxRuntimeMs: BOOTH_JOB_MAX_RUNTIME_MS, ref: args.draftId }
         );

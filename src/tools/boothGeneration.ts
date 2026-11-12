@@ -1,9 +1,6 @@
 import type { StudioClient } from "../studio/client.js";
 import { RECONNECT_TO_CREATE, StudioError } from "../studio/errors.js";
 import type { JobContext } from "../jobs/store.js";
-import { draftOrientations, type BoothOrientation } from "../creations/draftOrientation.js";
-
-export type { BoothOrientation } from "../creations/draftOrientation.js";
 
 /**
  * What `start_booth`, `refine_booth` and `create_booth` share: the Studio's
@@ -25,7 +22,7 @@ export type { BoothOrientation } from "../creations/draftOrientation.js";
  *   GET  /api/onboarding/progress       ?draftId                            narration
  *   POST /api/onboarding/draft-frames   { draftId }                         the booth's own 3 frames
  *   GET  /api/onboarding/frames, /catalog, /api/ai-effects/catalog          what /new picks from
- *   POST /api/projects/onboarding       { mode, title, slug, draftId, … }   the booth, for real
+ *   POST /api/projects/onboarding       { title, slug, draftId, … }         the booth, for real
  *
  * A draft lives in the Studio for seven days. Its id comes back to the model
  * as a plain value, so a conversation can continue after the job that made it
@@ -74,49 +71,6 @@ export const DRAW_POLL_ATTEMPTS = 6;
 export const DRAW_POLL_INTERVAL_MS = 8_000;
 /** How often the progress endpoint is read while a rebuild runs. */
 export const PROGRESS_POLL_MS = 5_000;
-
-/* ---------------------------------------------------------- orientation --- */
-
-/**
- * Which canvas the Studio lays a new booth out on. `mode` on POST
- * /api/projects/onboarding is the switch: "creator" = portrait phone canvas
- * (1080x1920), "product" = landscape laptop canvas (1920x1080). It sets the
- * booth's screen size, which welcome design leads, and the thumbnail. The
- * Studio's /import page sends "product" for a landscape brief the same way.
- *
- * Only the create call takes it. The frame and filter catalogues also read a
- * `mode`, but there "product" means square product frames, not a landscape
- * screen, so `create_booth` keeps those on "creator" (photo strips).
- */
-export function studioModeFor(orientation: BoothOrientation): "creator" | "product" {
-  return orientation === "landscape" ? "product" : "creator";
-}
-
-/** The welcome screen to show for a draft laid out this way. */
-export function welcomeUrlFor(
-  draft: Pick<BoothDraftResult, "welcomePortraitUrl" | "welcomeLandscapeUrl"> | null | undefined,
-  orientation: BoothOrientation | undefined
-): string | undefined {
-  if (!draft) return undefined;
-  const first = orientation === "landscape" ? draft.welcomeLandscapeUrl : draft.welcomePortraitUrl;
-  const second = orientation === "landscape" ? draft.welcomePortraitUrl : draft.welcomeLandscapeUrl;
-  return first || second || undefined;
-}
-
-/** The same words for the argument on start_booth and create_booth. */
-export const ORIENTATION_DESCRIBE =
-  "Which way the booth's screen faces where it will run. 'landscape' (wide) for a laptop, monitor, TV, or a tablet lying sideways; 'portrait' (tall) for a phone, an upright tablet or a vertical kiosk. " +
-  "Pass 'landscape' whenever the operator asks for landscape, horizontal or wide, or says the booth runs on a laptop, monitor or TV, in any language. " +
-  "Both screens are always drawn; this picks the one the booth is laid out and listed with. Defaults to portrait.";
-
-/**
- * The draft with the orientation chosen for it in this conversation, when one
- * was. The Studio's draft does not carry it; see draftOrientation.ts.
- */
-export function withOrientation(ownerKey: string, draft: BoothDraftResult): BoothDraftResult {
-  const orientation = draftOrientations.get(ownerKey, draft.draftId);
-  return orientation ? { ...draft, orientation } : draft;
-}
 
 /* --------------------------------------------------------------- shapes --- */
 
@@ -194,11 +148,6 @@ export interface BoothDraftResult {
   remainingRegens: number;
   /** Which welcome orientations a redraw touched ("portrait" / "landscape"). */
   regenerated?: string[];
-  /**
-   * The screen the booth will be laid out for, when the operator chose one in
-   * this conversation (start_booth or create_booth). Absent means portrait.
-   */
-  orientation?: BoothOrientation;
   /** What update_booth_draft gave the draft; absent until it has. */
   frameIds?: string[];
   filterIds?: string[];
@@ -217,8 +166,6 @@ export interface BoothCreated {
   dashboardUrl: string;
   /** The booth's rendered welcome thumbnail, else the draft's welcome design — so the card can show it. */
   imageUrl?: string;
-  /** The screen the booth was laid out for. */
-  orientation: BoothOrientation;
   ownFrameCount: number;
   catalogFrameCount: number;
   filterCount: number;
