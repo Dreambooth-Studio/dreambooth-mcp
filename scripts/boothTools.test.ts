@@ -365,10 +365,31 @@ test("a new headline goes to both screens with the words, never one orientation"
   assert.match(description, /Never use orientation for that/);
 });
 
-test("the draft card shows the laptop screen when only that one was redrawn", async () => {
+test("the draft card shows both welcome screens, laptop and phone, each named", async () => {
   const { generationWidgetHtml } = await import("../src/ui/generationResult.js");
-  assert.match(generationWidgetHtml, /imageTag\(draftImage\(d\)\)/);
-  assert.match(generationWidgetHtml, /r\.length === 1 && r\[0\] === "landscape" && d\.welcomeLandscapeUrl/);
+  // Both, so a redraw of either is visible and nobody reads the booth as portrait-only.
+  assert.match(generationWidgetHtml, /screensTag\(d\.welcomeLandscapeUrl, d\.welcomePortraitUrl\)/);
+  // Phone left, laptop right: the order of the Studio's dual card thumbnail.
+  assert.match(
+    generationWidgetHtml,
+    /cell\(portraitUrl, "0\.5625", "9 \/ 16", t\.phoneScreen\) \+\s*cell\(landscapeUrl, "1\.7778", "16 \/ 9", t\.laptopScreen\)/
+  );
+  // Every language names both screens.
+  assert.equal(generationWidgetHtml.match(/laptopScreen: "/g)?.length, 3);
+  assert.equal(generationWidgetHtml.match(/phoneScreen: "/g)?.length, 3);
+});
+
+test("the model is told every booth has both screens, so 'landscape' needs no redraw", async () => {
+  const { studio } = fakeStudio(() => DRAFT_REPLY);
+  const start = buildStartBooth(studio);
+  const check = buildCheckGeneration(studio, CONFIG);
+  assert.match(String(start.config.description), /phone \(portrait\) and laptop \(landscape\)/);
+  assert.match(String(start.config.description), /no orientation to choose/);
+
+  const started = await start.handler({ prompt: "wedding, sage and white roses" });
+  await drained();
+  const done = await check.handler({ jobId: started.jobId });
+  assert.match(String(done.note), /no redraw or new draft is needed/);
 });
 
 test("refine_booth posts that body and keeps the draft id on the handle and the result", async () => {
@@ -611,6 +632,17 @@ test("create_booth runs /new's last screens in order and sends no theme", async 
   // The booth's rendered thumbnail, for the card.
   assert.equal(result.imageUrl, "https://cdn.dreambooth-team.workers.dev/project/__onboarding__/d-thumbnail.png");
   assert.ok(seen.some((s) => /link name/i.test(s)) && seen.some((s) => /Creating the booth/.test(s)));
+});
+
+test("the created booth's card shows the booth as the Studio lists it, both screens when it drew them", async () => {
+  const dual = `https://dreamboothidbucket.s3.ap-southeast-3.amazonaws.com/project/abc/welcome-${HEX24("b")}-dual-1-ab.jpg`;
+  const { studio } = fakeStudio(
+    happyCreate({
+      "GET /api/projects/by-slug": (_m, _p, _b, query) => ({ _id: HEX24("b"), slug: query?.slug, thumbnail: dual }),
+    })
+  );
+  const result = await createBoothWork(studio, CONFIG, CREATE_ARGS, ctxOf([]), { pollSleep: noSleep });
+  assert.equal(result.imageUrl, dual);
 });
 
 test("a taken link name stops the create before anything is drawn", async () => {

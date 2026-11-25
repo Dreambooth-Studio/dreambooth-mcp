@@ -109,7 +109,9 @@ const SCRIPT = `
       notShown: "Tidak tampak di pratinjau (tetap diterapkan booth):",
       workingOn: "Sedang:",
       setLine: "Diatur:",
-      notApplied: "Tidak diterapkan:"
+      notApplied: "Tidak diterapkan:",
+      laptopScreen: "Laptop",
+      phoneScreen: "Ponsel"
     },
     en: {
       ready: "Preview ready",
@@ -141,7 +143,9 @@ const SCRIPT = `
       notShown: "Not shown in the preview (the booth still applies them):",
       workingOn: "Now:",
       setLine: "Set:",
-      notApplied: "Not applied:"
+      notApplied: "Not applied:",
+      laptopScreen: "Laptop",
+      phoneScreen: "Phone"
     },
     es: {
       ready: "Vista previa lista",
@@ -173,7 +177,9 @@ const SCRIPT = `
       notShown: "No se ve en la vista previa (la cabina igual los aplica):",
       workingOn: "Ahora:",
       setLine: "Ajustado:",
-      notApplied: "No aplicado:"
+      notApplied: "No aplicado:",
+      laptopScreen: "Portátil",
+      phoneScreen: "Teléfono"
     }
   };
 
@@ -216,13 +222,40 @@ const SCRIPT = `
       '</div>';
   }
 
+  /**
+   * Both welcome screens, phone then laptop (the Studio's dual card
+   * thumbnail's order, so chat and the booth list agree), at the same
+   * height, each named.
+   * Every booth has both and shows the one that fits the device it runs on;
+   * the phone screen alone read as "it only made it vertical" (2026-11-12).
+   * One image when only one has an address.
+   *
+   * Equal heights from flex-grow in proportion to each aspect ratio: a cell's
+   * width is its share of the row, and width / ratio comes out the same.
+   */
+  function screensTag(landscapeUrl, portraitUrl) {
+    var ok = function (u) { return typeof u === "string" && u.indexOf("https://") === 0; };
+    if (!ok(landscapeUrl) || !ok(portraitUrl)) return imageTag(ok(portraitUrl) ? portraitUrl : landscapeUrl);
+    var cell = function (url, grow, ratio, label) {
+      return '<div style="flex:' + grow + ' 1 0;min-width:0">' +
+        '<img src="' + esc(url) + '" alt="" style="display:block;width:100%;aspect-ratio:' + ratio + ';object-fit:cover;border-radius:.25rem;border:1px solid var(--db-border)">' +
+        '<p class="db-sub" style="margin-top:.25rem;text-align:center">' + esc(label) + '</p>' +
+        '</div>';
+    };
+    return '<div class="db-preview" style="margin-top:.75rem;display:flex;gap:.5rem;align-items:flex-start;padding:.5rem;border-radius:.375rem;background:var(--db-surface-hover)">' +
+      cell(portraitUrl, "0.5625", "9 / 16", t.phoneScreen) +
+      cell(landscapeUrl, "1.7778", "16 / 9", t.laptopScreen) +
+      '</div>';
+  }
+
   /** A blocked or broken image degrades to a sentence, not a broken icon. */
   function watchImages() {
     var imgs = el.querySelectorAll(".db-preview img");
     for (var i = 0; i < imgs.length; i++) {
       (function (img) {
         img.onerror = function () {
-          var holder = img.parentNode;
+          // The whole preview, so a two-screen row degrades the same way.
+          var holder = img.closest ? img.closest(".db-preview") : img.parentNode;
           if (holder) {
             // The holder was sized for an image (line-height 0); give the
             // sentence normal line-height or it prints over the next line.
@@ -322,17 +355,6 @@ const SCRIPT = `
     db.fit();
   }
 
-  /**
-   * The screen to show: the phone one, unless a redraw changed only the
-   * laptop one. Showing the untouched phone screen after a laptop redraw made
-   * the change look like it had not happened.
-   */
-  function draftImage(d) {
-    var r = Array.isArray(d.regenerated) ? d.regenerated : [];
-    if (r.length === 1 && r[0] === "landscape" && d.welcomeLandscapeUrl) return d.welcomeLandscapeUrl;
-    return d.welcomePortraitUrl || d.welcomeLandscapeUrl;
-  }
-
   function renderDraft(out) {
     var d = out.draft || {};
     var p = d.palette || {};
@@ -357,7 +379,8 @@ const SCRIPT = `
       (facts.length ? '<p class="db-sub">' + esc(facts.join(" · ")) + '</p>' : '') +
       '<p class="db-sub" style="margin-top:.5rem">' + swatch(p.backgroundColor) + swatch(p.primaryColor) + swatch(p.secondaryColor) +
         (d.slug ? '<span style="vertical-align:middle">dreambooth.app/' + esc(d.slug) + '</span>' : '') + '</p>' +
-      imageTag(draftImage(d)) +
+      // Both screens, so a redraw of either one is visible too.
+      screensTag(d.welcomeLandscapeUrl, d.welcomePortraitUrl) +
       (mode ? '<p class="db-sub" style="margin-top:.5rem">' + esc(mode) + '</p>' : '') +
       (edited.length ? '<p class="db-sub" style="margin-top:.25rem">' + esc(t.setLine) + ' ' + esc(edited.join(' · ')) + '</p>' : '') +
       (rejected.length ? '<p class="db-sub" style="margin-top:.25rem">' + esc(t.notApplied) + ' ' + esc(rejected.join('; ')) + '</p>' : '') +

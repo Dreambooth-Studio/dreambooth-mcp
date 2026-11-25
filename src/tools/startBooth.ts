@@ -7,6 +7,7 @@ import {
   BOOTH_GENERATE_TIMEOUT_MS,
   BOOTH_JOB_MAX_RUNTIME_MS,
   BOOTH_STARTED_NOTE,
+  BOTH_SCREENS_NOTE,
   boothErrorFor,
   summariseDraft,
   type BoothDraftReply,
@@ -50,6 +51,8 @@ export function buildStartBooth(studio: StudioClient) {
       description:
         "Design a complete photobooth (a 'booth') for this operator from a description — the Studio designs the welcome screen for phone and laptop, the in-booth background, the colour theme, the capture mode, a title and a link name, exactly as dreambooth.app/new does. " +
         "Before calling, gather in chat what /new would ask and put ALL of it in the prompt: the occasion or business, the vibe or style, colours, and the language the booth should speak — there is no separate questions step. " +
+        BOTH_SCREENS_NOTE +
+        " " +
         "It returns a job id immediately; call check_generation, and do NOT describe the booth as designed or created until that says done. " +
         "The result is a DRAFT with a draftId: nothing is in the operator's booth list until create_booth. " +
         "Every call makes a new draft and spends 1 of its 3 full generations, and an account may start 10 drafts an hour — never call it speculatively or twice for one request; change a draft with refine_booth instead.",

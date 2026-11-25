@@ -304,6 +304,9 @@ export async function createBoothWork(
   try {
     const doc = await get<{ _id?: string; thumbnail?: string }>("/api/projects/by-slug", { slug: createdSlug });
     if (doc?._id) projectId = String(doc._id);
+    // The booth as the Studio lists it: both screens side by side
+    // (`welcome-<id>-dual-…`) when the owner has project_thumbnail_dual, else
+    // the phone screen.
     if (typeof doc?.thumbnail === "string" && doc.thumbnail.startsWith("https://")) {
       imageUrl = doc.thumbnail;
     }
