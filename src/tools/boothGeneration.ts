@@ -174,7 +174,7 @@ export interface BoothCreated {
   title: string;
   boothUrl: string;
   dashboardUrl: string;
-  /** Both welcome screens as the Studio lists the booth, else its phone thumbnail, else the draft's welcome — so the card can show it. */
+  /** The booth's thumbnail as the Studio lists it (both screens when the Studio drew them), else the draft's welcome — so the card can show it. */
   imageUrl?: string;
   ownFrameCount: number;
   catalogFrameCount: number;

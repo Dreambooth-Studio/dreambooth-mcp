@@ -223,7 +223,9 @@ const SCRIPT = `
   }
 
   /**
-   * Both welcome screens, laptop then phone, at the same height, each named.
+   * Both welcome screens, phone then laptop (the Studio's dual card
+   * thumbnail's order, so chat and the booth list agree), at the same
+   * height, each named.
    * Every booth has both and shows the one that fits the device it runs on;
    * the phone screen alone read as "it only made it vertical" (2026-11-12).
    * One image when only one has an address.
@@ -241,8 +243,8 @@ const SCRIPT = `
         '</div>';
     };
     return '<div class="db-preview" style="margin-top:.75rem;display:flex;gap:.5rem;align-items:flex-start;padding:.5rem;border-radius:.375rem;background:var(--db-surface-hover)">' +
-      cell(landscapeUrl, "1.7778", "16 / 9", t.laptopScreen) +
       cell(portraitUrl, "0.5625", "9 / 16", t.phoneScreen) +
+      cell(landscapeUrl, "1.7778", "16 / 9", t.laptopScreen) +
       '</div>';
   }
 

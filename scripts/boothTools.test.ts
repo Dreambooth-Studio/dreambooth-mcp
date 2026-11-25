@@ -369,8 +369,11 @@ test("the draft card shows both welcome screens, laptop and phone, each named", 
   const { generationWidgetHtml } = await import("../src/ui/generationResult.js");
   // Both, so a redraw of either is visible and nobody reads the booth as portrait-only.
   assert.match(generationWidgetHtml, /screensTag\(d\.welcomeLandscapeUrl, d\.welcomePortraitUrl\)/);
-  assert.match(generationWidgetHtml, /cell\(landscapeUrl, "1\.7778", "16 \/ 9", t\.laptopScreen\)/);
-  assert.match(generationWidgetHtml, /cell\(portraitUrl, "0\.5625", "9 \/ 16", t\.phoneScreen\)/);
+  // Phone left, laptop right: the order of the Studio's dual card thumbnail.
+  assert.match(
+    generationWidgetHtml,
+    /cell\(portraitUrl, "0\.5625", "9 \/ 16", t\.phoneScreen\) \+\s*cell\(landscapeUrl, "1\.7778", "16 \/ 9", t\.laptopScreen\)/
+  );
   // Every language names both screens.
   assert.equal(generationWidgetHtml.match(/laptopScreen: "/g)?.length, 3);
   assert.equal(generationWidgetHtml.match(/phoneScreen: "/g)?.length, 3);
@@ -631,20 +634,15 @@ test("create_booth runs /new's last screens in order and sends no theme", async 
   assert.ok(seen.some((s) => /link name/i.test(s)) && seen.some((s) => /Creating the booth/.test(s)));
 });
 
-test("the created booth's card shows both screens when the Studio drew them", async () => {
-  const screens = "https://cdn.dreambooth-team.workers.dev/project/__onboarding__/d-screens.png";
+test("the created booth's card shows the booth as the Studio lists it, both screens when it drew them", async () => {
+  const dual = `https://dreamboothidbucket.s3.ap-southeast-3.amazonaws.com/project/abc/welcome-${HEX24("b")}-dual-1-ab.jpg`;
   const { studio } = fakeStudio(
     happyCreate({
-      "GET /api/projects/by-slug": (_m, _p, _b, query) => ({
-        _id: HEX24("b"),
-        slug: query?.slug,
-        thumbnail: "https://cdn.dreambooth-team.workers.dev/project/__onboarding__/d-thumbnail.png",
-        screensThumbnail: screens,
-      }),
+      "GET /api/projects/by-slug": (_m, _p, _b, query) => ({ _id: HEX24("b"), slug: query?.slug, thumbnail: dual }),
     })
   );
   const result = await createBoothWork(studio, CONFIG, CREATE_ARGS, ctxOf([]), { pollSleep: noSleep });
-  assert.equal(result.imageUrl, screens);
+  assert.equal(result.imageUrl, dual);
 });
 
 test("a taken link name stops the create before anything is drawn", async () => {
